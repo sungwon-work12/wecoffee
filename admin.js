@@ -6245,9 +6245,8 @@ window.hideCalibration = async function() {
   function rkMD(v) {
     if (!v) return "";
     var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (m) return (+m[2]) + "/" + (+m[3]);
-    var d = new Date(v); if (isNaN(d)) return "";
-    return (d.getMonth() + 1) + "/" + d.getDate();
+    var d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v); if (isNaN(d)) return "";
+    return (d.getMonth() + 1) + "/" + d.getDate() + " (" + ["일", "월", "화", "수", "목", "금", "토"][d.getDay()] + ")";   /* 10-31: 요일 표기 */
   }
   function rkAttr(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function rkPlace(r) {
@@ -6282,7 +6281,7 @@ window.hideCalibration = async function() {
             cup = { sid: String(cb.session_id || ""), t: t, date: ss.scheduled_at || "", cva: rec ? Number(rec.cva_score) : null };
           }
         });
-        rows.push({ resId: r.id, name: it.name, vendor: it.vendor, sub: "로스팅 " + rkMD(String(r.res_date || "").split("T")[0]) + (rkPlace(r) ? " · " + rkPlace(r) : ""), cup: cup });
+        rows.push({ resId: r.id, name: it.name, vendor: it.vendor, sub: "로스팅 " + rkMD(String(r.res_date || "").split("T")[0]) + (r.res_time ? " " + String(r.res_time).trim() : "") + (rkPlace(r) ? " · " + rkPlace(r) : ""), cup: cup });
       });
     });
     return rows;
