@@ -7582,12 +7582,16 @@ window.hideCalibration = async function() {
     var n = ST.items.filter(function (a) { return a.unread; }).length;
     bells().forEach(function (b) { b.classList.toggle("has", n > 0); b.querySelector(".n").textContent = n > 99 ? "99+" : n; b.style.display = ST.off ? "none" : ""; });
   }
+  /* 10-31: 안 읽은 것 + 오늘 읽은 것만 보임 → 읽은 알림은 그날 자정(한국 시간)에 사라짐 */
+  function kstDay(t) { var d = new Date(t); if (isNaN(d)) return ""; return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10); }
+  function shown(a) { return !!a.unread || (!!a.read_at && kstDay(a.read_at) === kstDay(Date.now())); }
   function paintList() {
     var p = document.getElementById("wcActPop"); if (!p) return;
     var ls = p.querySelector(".ls");
     p.querySelector(".all").disabled = !ST.items.some(function (a) { return a.unread; });
-    if (!ST.items.length) { ls.innerHTML = '<div class="em">새 활동이 없어요.</div>'; return; }
+    if (!ST.items.some(shown)) { ls.innerHTML = '<div class="em">새 활동이 없어요.</div>'; return; }
     ls.innerHTML = ST.items.map(function (a, i) {
+      if (!shown(a)) return "";
       return '<div class="it' + (a.unread ? " un" : "") + '" data-i="' + i + '"><span class="dt"></span><div style="min-width:0;">' +
         '<div class="tt">' + esc(a.title) + '</div>' + (a.body ? '<div class="bd">' + esc(a.body) + '</div>' : '') +
         '<div class="tm">' + esc(ago(a.created_at)) + '</div></div></div>';
@@ -7612,7 +7616,7 @@ window.hideCalibration = async function() {
         var m = String(r.error.message || "") + " " + String(r.error.code || "");
         if (/admin_activity_feed|PGRST202|42883|does not exist|not find/i.test(m)) { ST.off = true; paintBadge(); }   // SQL 적용 전 → 숨김
       } else {
-        ST.items = ((r.data && Array.isArray(r.data.items)) ? r.data.items : []).filter(function (a) { return a.unread; });   // 10-31: 안 읽은 것만 보임 (읽으면 목록에서 빠짐)
+        ST.items = (r.data && Array.isArray(r.data.items)) ? r.data.items : [];
         ST.at = Date.now();
         paintBadge(); if (ST.open) paintList();
       }
@@ -7621,11 +7625,12 @@ window.hideCalibration = async function() {
   }
   async function readOne(a) {
     if (!a.unread) return;
-    a.unread = false; ST.items = ST.items.filter(function (x) { return x !== a; }); paintBadge(); paintList();
+    a.unread = false; a.read_at = new Date().toISOString(); paintBadge(); paintList();
     try { await SBC().rpc("admin_activity_read", { p_id: a.id }); } catch (e) {}
   }
   async function readAll() {
-    ST.items = []; paintBadge(); paintList();
+    var now = new Date().toISOString();
+    ST.items.forEach(function (a) { if (a.unread) { a.unread = false; a.read_at = now; } }); paintBadge(); paintList();
     try { await SBC().rpc("admin_activity_read", { p_id: null }); } catch (e) {}
   }
   function loggedIn() { var dv = document.getElementById("dashboard-view"); return !!(dv && dv.style.display !== "none" && dv.offsetParent !== null); }
