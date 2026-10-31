@@ -6262,12 +6262,15 @@ window.hideCalibration = async function() {
     roastRes.forEach(function (r) {
       var linked = cbs.filter(function (cb) { return String(cb.roast_reservation_id) === String(r.id); });
       var used = linked.map(function () { return false; });
-      var items = [];
+      var items = [], seenNm = {};
       (Array.isArray(r.plan_beans) ? r.plan_beans : []).forEach(function (b) {
         if (!b || !String(b.name || "").trim()) return;
+        var nk = rkNorm(b.name);   /* 같은 생두 발주 2건 → 한 줄 */
+        if (seenNm[nk]) { if (!seenNm[nk].vendor && b.vendor) seenNm[nk].vendor = String(b.vendor).trim(); return; }
         var cups = [];
         linked.forEach(function (cb, i) { if (!used[i] && rkNorm(cb.name) === rkNorm(b.name)) { used[i] = true; cups.push(cb); } });
-        items.push({ name: String(b.name).trim(), vendor: String(b.vendor || "").trim(), cups: cups });
+        var it = { name: String(b.name).trim(), vendor: String(b.vendor || "").trim(), cups: cups };
+        seenNm[nk] = it; items.push(it);
       });
       linked.forEach(function (cb, i) { if (!used[i] && String(cb.name || "").trim()) items.push({ name: String(cb.name).trim(), vendor: "", cups: [cb] }); });
       items.forEach(function (it) {
@@ -6329,7 +6332,8 @@ window.hideCalibration = async function() {
   };
   function resSub(r) {
     var bs = Array.isArray(r.plan_beans) ? r.plan_beans : [];
-    var names = bs.map(function (b) { if (!b || !b.name) return ""; return String(b.name).trim() + (b.vendor ? " (" + String(b.vendor).trim() + ")" : ""); }).filter(Boolean);
+    var seen = {}, names = [];   /* 같은 생두를 발주 2건으로 고른 경우 한 번만 (멤버 페이지와 동일) */
+    bs.forEach(function (b) { if (!b || !String(b.name || "").trim()) return; var k = rkNorm(b.name); if (seen[k]) return; seen[k] = 1; names.push(String(b.name).trim() + (b.vendor ? " (" + String(b.vendor).trim() + ")" : "")); });
     if (names.length) return "로스팅한 생두 · " + names.join(", ");
     if (r.purpose) return "트레이닝 · " + String(r.purpose).trim();
     return "";
