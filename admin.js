@@ -5587,7 +5587,7 @@ window.hideCalibration = async function() {
     var ress = [], trns = [];
     try {
       if (last4.length >= 3) {
-        var rq = await supabaseClient.from("reservations").select("id,phone,status,res_date,res_time,space_equip,center").ilike("phone", "%" + last4);
+        var rq = await supabaseClient.from("reservations").select("id,phone,status,res_date,res_time,space_equip,center,purpose,plan_beans").ilike("phone", "%" + last4);   /* 10-31: 멤버가 적은 예약 세부(로스팅한 생두 · 트레이닝)도 같이 */
         ress = (rq.data || []).filter(function (r) { return same(r.phone, phone) && !String(r.status||"").includes("취소"); });
         var tq = await supabaseClient.from("trainings").select("id,phone,status,content,created_at,name").ilike("phone", "%" + last4);
         trns = (tq.data || []).filter(function (r) { return same(r.phone, phone) && !String(r.status||"").includes("취소"); });
@@ -5601,7 +5601,7 @@ window.hideCalibration = async function() {
     ress.forEach(function (r) { bump(centerCnt, r.center); bumpZone(r.center, resolveZone(r.center, r.space_equip)); });
     trns.forEach(function (t) { var c = String(t.content || "").split(" || "); bump(centerCnt, c[3]); bumpZone(c[3], trnZone(c[3], c)); });
     // ── 커핑(센서리) 성장 ── (참가자는 실제 전화번호로 매칭: members(phone) 조인)
-    var sessions = [];
+    var sessions = [], roastRecs = [];
     {
       try {
         var partsMap = {};
@@ -5614,7 +5614,7 @@ window.hideCalibration = async function() {
         var pids = parts.map(function (p) { return p.id; });
         var sids = parts.map(function (p) { return p.session_id; }).filter(Boolean);
         var recsAll = [], sessMap = {}, refMap = {};
-        if (pids.length) { var rr = await supabaseClient.from("cupping_records").select(STAR).in("participant_id", pids); recsAll = rr.data || []; }
+        if (pids.length) { var rr = await supabaseClient.from("cupping_records").select(STAR).in("participant_id", pids); recsAll = rr.data || []; roastRecs = recsAll; }
         if (sids.length) { var ssq = await supabaseClient.from("cupping_sessions").select("id,title,scheduled_at,created_via,host_name,host_batch").in("id", sids); (ssq.data || []).forEach(function (s) { sessMap[s.id] = s; }); }
         var beanIds = recsAll.map(function (r) { return r.bean_id; }).filter(Boolean);
         if (beanIds.length) { var rf = await supabaseClient.from("cupping_references").select(STAR).in("bean_id", beanIds); (rf.data || []).forEach(function (x) { refMap[x.bean_id] = x; }); }
@@ -5633,6 +5633,22 @@ window.hideCalibration = async function() {
       } catch (e) { console.warn("[cupping] 센서리 성장 조회 실패", e); }
     }
     var resCnt = ress.length, trnCnt = trns.length, cupCnt = sessions.length;
+    // ── 10-31: 로스팅 기록 — 로스팅존 예약의 '로스팅한 생두' + 그 생두로 한 커핑(커핑 원두의 roast_reservation_id로만 연결) ──
+    var roastRows = [], roastBySess = {}, cupCardSids = {};
+    sessions.forEach(function (s) { cupCardSids[String(s.sessionId)] = 1; });
+    try {
+      var roastRes = ress.filter(function (r) { return (Array.isArray(r.plan_beans) && r.plan_beans.length) || /로스팅/.test(String(r.space_equip || "")); });
+      if (roastRes.length) {
+        var cbs = [], csMap = {};
+        var cbq = await supabaseClient.from("cupping_beans").select("id,session_id,name,roast_reservation_id").in("roast_reservation_id", roastRes.map(function (r) { return r.id; }));
+        cbs = cbq.data || [];
+        var csIds = []; cbs.forEach(function (b) { if (b.session_id && csIds.indexOf(b.session_id) < 0) csIds.push(b.session_id); });
+        if (csIds.length) { var csq = await supabaseClient.from("cupping_sessions").select("id,title,scheduled_at").in("id", csIds); (csq.data || []).forEach(function (x) { csMap[x.id] = x; }); }
+        roastRes.sort(function (a, b) { var ka = String(a.res_date || "") + String(a.res_time || ""), kb = String(b.res_date || "") + String(b.res_time || ""); return ka < kb ? 1 : (ka > kb ? -1 : 0); });
+        roastRows = roastBuildRows(roastRes, cbs, csMap, roastRecs);
+        roastRows.forEach(function (row, i) { row.cupCard = !!(row.cup && cupCardSids[row.cup.sid]); if (row.cupCard) (roastBySess[row.cup.sid] = roastBySess[row.cup.sid] || []).push(i); });
+      }
+    } catch (e) { console.warn("[cupping] 로스팅 기록 조회 실패", e); }
     var pj = String(phone || "").replace(/'/g, ""), nj = String(name || "").replace(/'/g, "");
     var h = '<div style="border-top:1px solid var(--border-strong,#e5e8eb);margin-top:8px;padding-top:18px;">';
     // 멤버 누적 코칭 로그 (성장 관점) — 상세 최상단
@@ -5704,6 +5720,12 @@ window.hideCalibration = async function() {
     // ── 역량 성장(센서리·로스팅·추출) — 커핑12 성장 랭킹과 동일 계산(wcGrowthCompute) 재사용. 비동기 주입. ──
     h += sectionTitle("역량 성장", "20px", "센서리 · 로스팅 · 추출");
     h += '<div id="wcMemGrowth" style="margin-bottom:20px;"><div style="padding:14px;text-align:center;color:#8b95a1;font-size:13px;background:#f9fafb;border-radius:10px;">성장 데이터 불러오는 중…</div></div>';
+    // ── 10-31: 로스팅 기록 (커핑 이력 위) ──
+    if (roastRows.length) {
+      h += sectionTitle("로스팅 기록", "20px", "로스팅한 생두와 그 생두로 한 커핑");
+      h += moreList("memRoastMore", roastRows, 5, roastRowHTML);
+      h += '<div style="height:12px;"></div>';
+    }
     // ── 커핑 세션 이력(세션별 점수·상세) ──
     if (cupCnt) {
       h += sectionTitle("커핑 세션 이력", "20px", "세션별 점수 · 상세");
@@ -5712,10 +5734,12 @@ window.hideCalibration = async function() {
         var accBadge = isMem ? '<span style="font-size:11px;color:#8b95a1;">' + esc(s.host || "멤버") + '님이 연 세션</span>' : s.acc == null ? '<span style="font-size:11px;color:#b0b8c1;">레퍼런스 없음</span>'
           : '<span style="font-size:11px;font-weight:700;color:' + (s.acc <= 1 ? "#00b386" : (s.acc <= 2.5 ? "#e08600" : "#e5484d")) + ';">정확도 편차 ' + s.acc.toFixed(1) + '</span>';
         var sidj = String(s.sessionId || "").replace(/'/g, "");
-        h += '<div class="memCupCard" style="border:1px solid var(--border-strong,#e5e8eb);border-radius:12px;padding:12px 14px;margin-bottom:8px;">' +
+        var rIdx = roastBySess[String(s.sessionId)] || [];   // 10-31: 로스팅한 생두가 들어간 세션 표시
+        var rTag = rIdx.length ? '<span onclick="window.memRoastShow(\'' + sidj + '\')" style="flex-shrink:0;font-size:11px;font-weight:800;color:#4e5968;border:1px solid var(--border-strong,#e5e8eb);border-radius:7px;padding:2px 7px;cursor:pointer;">로스팅한 생두 ' + rIdx.length + '종</span>' : '';
+        h += '<div class="memCupCard" data-cup-sid="' + esc(String(s.sessionId || "")) + '" style="border:1px solid var(--border-strong,#e5e8eb);border-radius:12px;padding:12px 14px;margin-bottom:8px;transition:border-color .3s,box-shadow .3s;">' +
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
             '<div style="min-width:0;"><div style="display:flex;align-items:center;gap:6px;min-width:0;"><span style="font-size:14px;font-weight:700;color:#191f28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(s.title) + '</span>' +
-              (isMem ? '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#ea6f00;border:1px solid #ffd7b5;border-radius:7px;padding:2px 7px;">멤버 세션</span>' : '') + '</div>' +
+              (isMem ? '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#ea6f00;border:1px solid #ffd7b5;border-radius:7px;padding:2px 7px;">멤버 세션</span>' : '') + rTag + '</div>' +
             '<div style="font-size:12px;color:#8b95a1;margin-top:2px;">' + esc(dstr(s.date)) + ' · ' + accBadge + '</div></div>' +
             '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0;"><div style="font-size:16px;font-weight:800;color:#ea6f00;">' + fx(s.score) + '<span style="font-size:10px;color:#8b95a1;font-weight:700;"> 점</span></div>' +
             '<button type="button" class="btn-outline btn-sm" style="height:30px;padding:0 10px;" onclick="window.memCupReview(\'' + sidj + '\',\'' + pj + '\',\'' + nj + '\',this)">상세</button></div>' +
@@ -5731,7 +5755,7 @@ window.hideCalibration = async function() {
     // 센터 예약 이력
     h += sectionTitle("센터 예약 이력", "18px", "장비·공간");
     if (!ress.length) h += emptyBox("센터 예약 이력이 없습니다.");
-    else { ress.sort(function (a, b) { return new Date(b.res_date || 0) - new Date(a.res_date || 0); }); h += moreList("memResMore", ress, 5, function (r) { var t = [r.center, r.space_equip].filter(Boolean).join(" · ") || "센터 예약"; if (r.res_time) t += " · " + r.res_time; return cmtItem(t, dstr(r.res_date), "reservation", phone, name, { refId: r.id }, cnJoin(cnFullD(r.res_date), cnCenter(r.center), cnEquip(r.space_equip))); }); }
+    else { ress.sort(function (a, b) { return new Date(b.res_date || 0) - new Date(a.res_date || 0); }); h += moreList("memResMore", ress, 5, function (r) { var t = [r.center, String(r.space_equip || "").replace(/로스팅룸/g, "로스팅존")].filter(Boolean).join(" · ") || "센터 예약"; if (r.res_time) t += " · " + r.res_time; return cmtItem(t, dstr(r.res_date), "reservation", phone, name, { refId: r.id, sub: resSub(r) }, cnJoin(cnFullD(r.res_date), cnCenter(r.center), cnEquip(r.space_equip))); }); }
     h += '</div>';
     host.innerHTML = h;
     // ── [B] 마스터-디테일 셸 + 좌측 레일 + 우측 패널(설문 최상단) ──
@@ -6070,9 +6094,10 @@ window.hideCalibration = async function() {
   function cmtItem(title, dateStr, scope, phone, name, ctx, lbl){
     var pj = cq(phone), nj = cq(name), sj = cq(ctx.sessionId), bj = cq(ctx.beanId), rj = cq(ctx.refId);
     var label = (lbl != null) ? String(lbl) : ((dateStr ? dateStr + " · " : "") + String(title || ""));
-    return '<div data-cmt-item="1" data-label="' + esc(label) + '" style="border:1px solid #eef0f3;border-radius:10px;margin-bottom:6px;overflow:hidden;">' +
+    var sub = ctx.sub ? '<div style="font-size:12px;font-weight:500;color:#6b7684;margin-top:4px;line-height:1.5;white-space:normal;word-break:keep-all;">' + esc(ctx.sub) + '</div>' : '';   /* 10-31: 예약 세부 */
+    return '<div data-cmt-item="1" data-label="' + esc(label) + '"' + (ctx.refId ? ' data-cmt-ref="' + esc(scope + ':' + ctx.refId) + '"' : '') + ' style="border:1px solid #eef0f3;border-radius:10px;margin-bottom:6px;overflow:hidden;transition:border-color .3s,box-shadow .3s;">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;">' +
-        '<div style="min-width:0;font-size:13px;font-weight:600;color:#191f28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(title) + '</div>' +
+        '<div style="min-width:0;"><div style="min-width:0;font-size:13px;font-weight:600;color:#191f28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(title) + '</div>' + sub + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">' + (dateStr ? '<span style="font-size:12px;color:#8b95a1;">' + esc(dateStr) + '</span>' : '') +
         '<button type="button" onclick="window.memCoachToggle(this,\'' + scope + '\',\'' + pj + '\',\'' + nj + '\',\'' + sj + '\',\'' + bj + '\',\'' + rj + '\')" style="border:1px solid var(--border-strong,#e5e8eb);background:#fff;border-radius:7px;font-size:11px;font-weight:700;color:#4e5968;padding:4px 9px;cursor:pointer;flex-shrink:0;">코멘트</button></div>' +
       '</div>' +
@@ -6211,6 +6236,103 @@ window.hideCalibration = async function() {
   }
   function listItem(title, date) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #eef0f3;border-radius:10px;margin-bottom:6px;"><div style="min-width:0;font-size:13px;font-weight:600;color:#191f28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(title) + '</div><div style="font-size:12px;color:#8b95a1;flex-shrink:0;">' + esc(date) + '</div></div>';
+  }
+  // 10-31: 예약 세부 — 로스팅존은 멤버가 적은 '로스팅한 생두'(생두사), 그 밖의 공간은 '트레이닝' 종류
+  /* ── 10-31: 로스팅 기록 ──
+     · 행 = 로스팅존 예약에 적은 '로스팅한 생두' 하나
+     · 커핑 연결은 커핑 원두의 roast_reservation_id(멤버가 '내 로스팅에서 고르기'로 고른 것)로만 · 같은 예약 안에서 이름으로 줄 맞춤 */
+  function rkNorm(t) { return String(t == null ? "" : t).replace(/\s+/g, " ").trim().toLowerCase(); }
+  function rkMD(v) {
+    if (!v) return "";
+    var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return (+m[2]) + "/" + (+m[3]);
+    var d = new Date(v); if (isNaN(d)) return "";
+    return (d.getMonth() + 1) + "/" + d.getDate();
+  }
+  function rkAttr(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+  function rkPlace(r) {
+    var c = String(r.center || "").replace(/\s*센터\s*$/, "").trim();
+    var se = String(r.space_equip || "").trim(), i = se.indexOf("("), eq = "";
+    if (i >= 0 && /\)\s*$/.test(se)) eq = se.slice(i + 1).replace(/\)\s*$/, "").trim();
+    else eq = se.replace(/로스팅룸/g, "로스팅존");
+    return [c, eq].filter(Boolean).join(" ");
+  }
+  function roastBuildRows(roastRes, cbs, csMap, recs) {
+    var rows = [];
+    roastRes.forEach(function (r) {
+      var linked = cbs.filter(function (cb) { return String(cb.roast_reservation_id) === String(r.id); });
+      var used = linked.map(function () { return false; });
+      var items = [];
+      (Array.isArray(r.plan_beans) ? r.plan_beans : []).forEach(function (b) {
+        if (!b || !String(b.name || "").trim()) return;
+        var cups = [];
+        linked.forEach(function (cb, i) { if (!used[i] && rkNorm(cb.name) === rkNorm(b.name)) { used[i] = true; cups.push(cb); } });
+        items.push({ name: String(b.name).trim(), vendor: String(b.vendor || "").trim(), cups: cups });
+      });
+      linked.forEach(function (cb, i) { if (!used[i] && String(cb.name || "").trim()) items.push({ name: String(cb.name).trim(), vendor: "", cups: [cb] }); });
+      items.forEach(function (it) {
+        var cup = null;
+        it.cups.forEach(function (cb) {
+          var ss = csMap[cb.session_id] || {}, t = ss.scheduled_at ? new Date(ss.scheduled_at).getTime() : 0;
+          if (!cup || t > cup.t) {
+            var rec = (recs || []).filter(function (x) { return String(x.bean_id) === String(cb.id) && x.cva_score != null && x.cva_score !== "" && !isNaN(Number(x.cva_score)); })[0];
+            cup = { sid: String(cb.session_id || ""), t: t, date: ss.scheduled_at || "", cva: rec ? Number(rec.cva_score) : null };
+          }
+        });
+        rows.push({ resId: r.id, name: it.name, vendor: it.vendor, sub: "로스팅 " + rkMD(String(r.res_date || "").split("T")[0]) + (rkPlace(r) ? " · " + rkPlace(r) : ""), cup: cup });
+      });
+    });
+    return rows;
+  }
+  /* 행 HTML — 오른쪽: 커핑 이력 카드가 있으면 주황 버튼(누르면 그 카드로), 없으면 회색 글씨 */
+  function roastRowHTML(row) {
+    var right;
+    var c = row.cup, gray = 'flex-shrink:0;font-size:12px;color:#b0b8c1;font-weight:600;';
+    if (!c) right = '<span style="' + gray + '">아직 커핑 안 함</span>';
+    else if (row.cupCard) {
+      right = '<button type="button" onclick="window.memRoastGoCup(\'' + rkAttr(c.sid) + '\')" style="flex-shrink:0;display:inline-flex;align-items:center;gap:6px;border:1px solid #ffd7b5;border-radius:8px;background:#fff;padding:5px 9px;font:inherit;font-size:12px;font-weight:700;color:#ea6f00;cursor:pointer;">' +
+        '커핑 ' + esc(rkMD(c.date)) + (c.cva != null ? ' · CVA <b style="font-size:14px;font-weight:800;">' + c.cva.toFixed(1) + '</b>' : '') +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>';
+    }
+    else if (c.t && c.t > Date.now()) right = '<span style="' + gray + '">커핑 ' + esc(rkMD(c.date)) + ' 예정</span>';
+    else right = '<span style="' + gray + '">커핑 ' + esc(rkMD(c.date)) + ' · 기록 없음</span>';
+    return '<div data-roast-row="1" data-roast-sess="' + rkAttr(c ? c.sid : "") + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid #eef0f3;border-radius:10px;padding:11px 12px;margin-bottom:6px;transition:border-color .3s,box-shadow .3s;">' +
+      '<div style="min-width:0;flex:1 1 220px;"><div style="font-size:13px;font-weight:700;color:#191f28;word-break:keep-all;">' + esc(row.name) +
+        (row.vendor ? ' <span style="font-weight:500;color:#8b95a1;">· ' + esc(row.vendor) + '</span>' : '') + '</div>' +
+        '<div style="font-size:12px;color:#6b7684;margin-top:3px;line-height:1.5;">' + esc(row.sub) + '</div></div>' + right + '</div>';
+  }
+  function rkFlash(els) {
+    els.forEach(function (el) {
+      var bc = el.style.borderColor, bs = el.style.boxShadow;
+      el.style.borderColor = "var(--primary,#ff7900)"; el.style.boxShadow = "0 0 0 3px rgba(255,121,0,.14)";
+      setTimeout(function () { el.style.borderColor = bc; el.style.boxShadow = bs; }, 2600);
+    });
+  }
+  function rkScroll(el) { try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { el.scrollIntoView(); } }
+  /* 로스팅 행의 '커핑' 버튼 → 커핑 이력 카드로 이동 · 상세 열기 · 잠깐 강조 */
+  window.memRoastGoCup = function (sid) {
+    var card = null;
+    document.querySelectorAll(".memCupCard[data-cup-sid]").forEach(function (el) { if (!card && el.getAttribute("data-cup-sid") === String(sid)) card = el; });
+    if (!card) return;
+    var ev = card.querySelector(".memCupEval"), btn = card.querySelector("button.btn-outline");
+    if (ev && ev.getAttribute("data-open") !== "1" && btn) btn.click();
+    rkScroll(card); rkFlash([card]);
+  };
+  /* 커핑 카드의 '로스팅한 생두 N종' 태그 → 그 생두 로스팅 행으로 이동 · 잠깐 강조 */
+  window.memRoastShow = function (sid) {
+    var rows = [];
+    document.querySelectorAll('[data-roast-row="1"]').forEach(function (el) { if (el.getAttribute("data-roast-sess") === String(sid)) rows.push(el); });
+    if (!rows.length) return;
+    var more = document.getElementById("memRoastMore");
+    if (more && more.style.display === "none" && rows.some(function (el) { return more.contains(el); }) && typeof window.memToggleMore === "function") window.memToggleMore("memRoastMore");
+    rkScroll(rows[0]); rkFlash(rows);
+  };
+  function resSub(r) {
+    var bs = Array.isArray(r.plan_beans) ? r.plan_beans : [];
+    var names = bs.map(function (b) { if (!b || !b.name) return ""; return String(b.name).trim() + (b.vendor ? " (" + String(b.vendor).trim() + ")" : ""); }).filter(Boolean);
+    if (names.length) return "로스팅한 생두 · " + names.join(", ");
+    if (r.purpose) return "트레이닝 · " + String(r.purpose).trim();
+    return "";
   }
   function moreList(id, items, initial, renderItem) {
     var head = items.slice(0, initial).map(renderItem).join("");
@@ -7367,6 +7489,18 @@ window.hideCalibration = async function() {
   "use strict";
   var SBC = function () { return (typeof supabaseClient !== "undefined") ? supabaseClient : null; };
   var ST = { items: [], open: false, off: false, at: 0, busy: false };
+  function focusRes(id) {
+    var n = 0, t = setInterval(function () {
+      var el = document.querySelector('[data-cmt-ref="reservation:' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+      if (!el) { if (++n > 40) clearInterval(t); return; }
+      clearInterval(t);
+      var more = el.closest("#memResMore"); if (more && more.style.display === "none" && typeof window.memToggleMore === "function") window.memToggleMore("memResMore");
+      try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { el.scrollIntoView(); }
+      var bc = el.style.borderColor, bs = el.style.boxShadow;
+      el.style.borderColor = "var(--primary,#ff7900)"; el.style.boxShadow = "0 0 0 3px rgba(255,121,0,.14)";
+      setTimeout(function () { el.style.borderColor = bc; el.style.boxShadow = bs; }, 2600);
+    }, 250);
+  }
   var BELL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
   function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function ago(ts) {
@@ -7429,7 +7563,10 @@ window.hideCalibration = async function() {
         var a = ST.items[+it.getAttribute("data-i")]; if (!a) return;
         readOne(a);
         close();
-        if (a.member_phone && typeof window.openHistoryModal === "function") window.openHistoryModal(a.member_phone, a.member_name || "멤버");
+        if (a.member_phone && typeof window.openHistoryModal === "function") {
+          window.openHistoryModal(a.member_phone, a.member_name || "멤버");
+          if (a.kind === "roast_plan" && a.ref_id) focusRes(String(a.ref_id));   // 10-31: 로스팅 기록 알림 → 그 예약 줄로 이동·잠깐 강조
+        }
       });
       document.body.appendChild(p);
       document.addEventListener("click", function () { if (ST.open) close(); });
