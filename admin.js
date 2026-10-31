@@ -7586,7 +7586,7 @@ window.hideCalibration = async function() {
     var p = document.getElementById("wcActPop"); if (!p) return;
     var ls = p.querySelector(".ls");
     p.querySelector(".all").disabled = !ST.items.some(function (a) { return a.unread; });
-    if (!ST.items.length) { ls.innerHTML = '<div class="em">최근 14일 동안 새 활동이 없어요.</div>'; return; }
+    if (!ST.items.length) { ls.innerHTML = '<div class="em">새 활동이 없어요.</div>'; return; }
     ls.innerHTML = ST.items.map(function (a, i) {
       return '<div class="it' + (a.unread ? " un" : "") + '" data-i="' + i + '"><span class="dt"></span><div style="min-width:0;">' +
         '<div class="tt">' + esc(a.title) + '</div>' + (a.body ? '<div class="bd">' + esc(a.body) + '</div>' : '') +
@@ -7607,12 +7607,12 @@ window.hideCalibration = async function() {
     if (!force && Date.now() - ST.at < 55000) return;
     ST.busy = true;
     try {
-      var r = await sb.rpc("admin_activity_feed", { p_limit: 30 });
+      var r = await sb.rpc("admin_activity_feed", { p_limit: 100 });
       if (r.error) {
         var m = String(r.error.message || "") + " " + String(r.error.code || "");
         if (/admin_activity_feed|PGRST202|42883|does not exist|not find/i.test(m)) { ST.off = true; paintBadge(); }   // SQL 적용 전 → 숨김
       } else {
-        ST.items = (r.data && Array.isArray(r.data.items)) ? r.data.items : [];
+        ST.items = ((r.data && Array.isArray(r.data.items)) ? r.data.items : []).filter(function (a) { return a.unread; });   // 10-31: 안 읽은 것만 보임 (읽으면 목록에서 빠짐)
         ST.at = Date.now();
         paintBadge(); if (ST.open) paintList();
       }
@@ -7621,11 +7621,11 @@ window.hideCalibration = async function() {
   }
   async function readOne(a) {
     if (!a.unread) return;
-    a.unread = false; paintBadge();
+    a.unread = false; ST.items = ST.items.filter(function (x) { return x !== a; }); paintBadge(); paintList();
     try { await SBC().rpc("admin_activity_read", { p_id: a.id }); } catch (e) {}
   }
   async function readAll() {
-    ST.items.forEach(function (a) { a.unread = false; }); paintBadge(); paintList();
+    ST.items = []; paintBadge(); paintList();
     try { await SBC().rpc("admin_activity_read", { p_id: null }); } catch (e) {}
   }
   function loggedIn() { var dv = document.getElementById("dashboard-view"); return !!(dv && dv.style.display !== "none" && dv.offsetParent !== null); }
