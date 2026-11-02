@@ -7955,7 +7955,7 @@ window.hideCalibration = async function() {
   function buildCards(d) {
     var ref = d.ref, refHasInt = !!(ref && KEYS.some(function (k) { return num(ref[k]) != null; }));
     var refSet = {}; ((ref && ref.ref_notes) || []).forEach(function (n) { var k = nk(n); if (k) refSet[k] = 1; });
-    var kind = refHasInt ? "센서리 훈련 · 캘리브레이션" : (d.sess.created_via === "member" ? "멤버 커핑 세션" : "센서리 훈련");
+    var kind = d.sess.created_via === "member" ? "멤버 커핑 세션" : "센서리 훈련";
     var b = d.bean || {};
     var info = [["지역", b.origin], ["농장", b.farm], ["가공", b.process], ["품종", b.variety], ["고도", b.altitude], ["로스팅", b.roast_level]]
       .filter(function (x) { return String(x[1] == null ? "" : x[1]).trim(); }).map(function (x) { return [x[0], String(x[1]).trim()]; });
@@ -8043,8 +8043,10 @@ window.hideCalibration = async function() {
     }
     // 멤버 · CVA
     y += 20;
-    font(700, 11.5); tx("CVA", W - P, y + 10, "#8b95a1", "right");
-    font(800, 34); tx(cvaTxt(c.cva), W - P, y + 46, "#ea6f00", "right");
+    if (c.cva != null) {   // CVA 점수가 없는 세션(강도만 기록)은 칸을 비움
+      font(700, 11.5); tx("CVA", W - P, y + 10, "#8b95a1", "right");
+      font(800, 34); tx(cvaTxt(c.cva), W - P, y + 46, "#ea6f00", "right");
+    }
     font(600, 13); tx(c.batch, P, y + 44, "#8b95a1");
     var bw = c.batch ? x.measureText(c.batch).width + 7 : 0;
     font(800, 17); tx(c.shown, P + bw, y + 44, "#191f28");
@@ -8181,12 +8183,13 @@ window.hideCalibration = async function() {
   }
   function freeUrls() { M.urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); M.urls = []; }
   window.wcCardClose = function () { freeUrls(); var o = _$("wcCardOly"); if (o) o.remove(); };
-  window.wcCardOpen = async function () {
-    var sid = curSid(); if (!sid) { toast("세션을 먼저 열어 주세요."); return; }
+  window.wcCardOpen = async function (sid0, bean0) {
+    var sid = (typeof sid0 === "string" && sid0) ? sid0 : curSid(); if (!sid) { toast("세션을 먼저 열어 주세요."); return; }
     var beans = beansOf(sid);
+    if (!beans.length && CR.beans[sid]) beans = CR.beans[sid];
     if (!beans.length) { toast("원두 라인업이 없어요."); return; }
     styleOnce(); window.wcCardClose();
-    var cur = _$("cupRvBean") ? _$("cupRvBean").value : "";
+    var cur = (typeof bean0 === "string" && bean0) ? bean0 : (_$("cupRvBean") ? _$("cupRvBean").value : "");
     if (!cur || cur === "__all__" || !beans.some(function (b) { return String(b.id) === String(cur); })) cur = beans[0].id;
     var o = document.createElement("div"); o.id = "wcCardOly";
     o.innerHTML = '<div class="pn"><div class="hd"><b>커핑 평가 카드</b><button type="button" class="x" aria-label="닫기" onclick="window.wcCardClose()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
@@ -8252,10 +8255,11 @@ window.hideCalibration = async function() {
   document.addEventListener("click", function (e) { if (e.target && e.target.closest && e.target.closest("#cupRvBtn")) setTimeout(injectBtn, 0); }, true);
   window.wcCardDraw = drawCard;   // 검증용
 
-  /* ═══════════════ 1-2. 성장 현황 > 하위 탭 '커핑 기록' (11-02 · 관리자 공통 탭 줄 .sub-nav 사용) ═══════════════
-     · 지난 세션까지 전부 · 회차별 / 원두별 → 원두 고르면 참가자 전원 평가 카드
-     · 카드마다 '저장' = PNG 바로 저장 · '전체 저장' = zip */
-  var CR = { loaded: false, busy: false, view: "s", q: "", sess: [], beans: {}, cnt: {}, refBeans: {}, selS: null, selB: null, cards: [], blobs: [], urls: [], seq: 0 };
+  /* ═══════════════ 1-2. 성장 현황 > 하위 탭 '커핑 기록' (11-02) ═══════════════
+     · 센서리 훈련 커핑만 · 처음엔 목록 한 칸 → 회차를 누르면 그 자리에 회차 화면(← 목록)
+     · 회차 화면 = 원두 고르기 + 기존 '참가자 평가 조회' 결과보기(window.wcRenderReview) 그대로
+     · 오른쪽 위 '평가 카드 내보내기' → 카드 창(한 장씩 PNG / 전체 zip) */
+  var CR = { loaded: false, busy: false, view: "s", q: "", sess: [], beans: {}, cnt: {}, mode: "list", selS: null, selB: null, seq: 0 };
   async function fetchAll(table, cols) {
     var out = [], step = 1000;
     for (var i = 0; i < 80; i++) {
@@ -8267,54 +8271,45 @@ window.hideCalibration = async function() {
     return out;
   }
   function centerTxt(c) { c = String(c || ""); return c === "gwangjin" ? "광진" : (c === "mapo" ? "마포" : c); }
+  function shortDate(s) { var d = new Date(s); if (!s || isNaN(d)) return "—"; return String(d.getFullYear()).slice(2) + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + DOW[d.getDay()] + ")"; }
+  var CHEV = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
   function crStyle() {
     if (_$("wcCrStyle")) return;
     var st = document.createElement("style"); st.id = "wcCrStyle";
+    var P = "#wcCupRecPage ";
     st.textContent =
       "#wcGrowthSubNav{margin:0 0 18px;}#wcCupRecPage{display:none;}#wcGrowthPage.wc-tab-c #wcCupRecPage{display:block;}#wcGrowthPage.wc-tab-c .wcgr-mainbox{display:none!important;}" +
-      "#wcCupRecPage .crtop{display:flex;justify-content:flex-end;margin-bottom:14px;}" +
-      "#wcCupRecPage .crbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}" +
-      "#wcCupRecPage .crseg{display:inline-flex;border:1px solid #e5e8eb;border-radius:9px;overflow:hidden;background:#fff;}" +
-      "#wcCupRecPage .crseg button{height:34px;padding:0 14px;border:none;background:#fff;font-family:inherit;font-size:13px;font-weight:700;color:#8b95a1;cursor:pointer;}" +
-      "#wcCupRecPage .crseg button+button{border-left:1px solid #e5e8eb;}" +
-      "#wcCupRecPage .crseg button.on{color:#ea6f00;box-shadow:inset 0 -2px 0 #ff7900;}" +
-      "#wcCupRecPage .crq{height:34px;border:1px solid #e5e8eb;border-radius:9px;padding:0 12px;font-family:inherit;font-size:13px;min-width:220px;background:#fff;}" +
-      "#wcCupRecPage .crgrid{display:grid;grid-template-columns:minmax(0,1fr) 480px;gap:18px;align-items:start;}" +
-      "#wcCupRecPage .crlist{background:#fff;border:1px solid #e5e8eb;border-radius:16px;padding:6px 16px 10px;}" +
-      "#wcCupRecPage .crhead,#wcCupRecPage .crrow{display:grid;gap:10px;align-items:center;padding:0 8px;}" +
-      "#wcCupRecPage .crlist.s .crhead,#wcCupRecPage .crlist.s .crrow{grid-template-columns:118px minmax(0,1fr) 92px 44px 44px 50px;}" +
-      "#wcCupRecPage .crlist.b .crhead,#wcCupRecPage .crlist.b .crrow{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 50px;}" +
-      "#wcCupRecPage .crhead{font-size:12px;font-weight:700;color:#8b95a1;padding-top:12px;padding-bottom:9px;border-bottom:1px solid #e5e8eb;}" +
-      "#wcCupRecPage .crrow{width:100%;border:none;border-bottom:1px solid #f2f4f6;background:#fff;font-family:inherit;text-align:left;font-size:13px;color:#191f28;padding-top:12px;padding-bottom:12px;cursor:pointer;border-radius:0;}" +
-      "#wcCupRecPage .crrow:hover{background:#fffaf5;}#wcCupRecPage .crrow.on{background:#fffaf5;font-weight:700;}" +
-      "#wcCupRecPage .crrow > span{min-width:0;word-break:keep-all;}#wcCupRecPage .crrow .nw{white-space:nowrap;}" +
-      "#wcCupRecPage .crlist .g{color:#8b95a1;}" +
-      "#wcCupRecPage .crtag{font-size:11px;font-weight:800;border:1px solid #ffd7b5;color:#ea6f00;border-radius:6px;padding:2px 6px;}" +
-      "#wcCupRecPage .crtag.m{border-color:#e5e8eb;color:#4e5968;}" +
-      "#wcCupRecPage .crdet{background:#fff;border:1px solid #e5e8eb;border-radius:16px;padding:18px 18px 20px;position:sticky;top:16px;}" +
-      "#wcCupRecPage .crdet .h{font-size:15px;font-weight:800;color:#191f28;}" +
-      "#wcCupRecPage .crdet .m{font-size:12.5px;color:#8b95a1;margin-top:3px;}" +
-      "#wcCupRecPage .crbeans{display:flex;flex-direction:column;gap:6px;margin:14px 0 16px;}" +
-      "#wcCupRecPage .crbean{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;border:1px solid #eef0f3;border-radius:10px;padding:10px 12px;background:#fff;font-family:inherit;font-size:13px;font-weight:600;color:#191f28;cursor:pointer;}" +
-      "#wcCupRecPage .crbean span{flex-shrink:0;font-size:12px;font-weight:500;color:#8b95a1;}" +
-      "#wcCupRecPage .crbean.on{border-color:#ff7900;color:#ea6f00;font-weight:700;}#wcCupRecPage .crbean.on span{color:#ea6f00;}" +
-      "#wcCupRecPage .cracts{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;}" +
-      "#wcCupRecPage .cracts b{font-size:13px;font-weight:800;color:#191f28;}#wcCupRecPage .cracts b span{color:#8b95a1;font-weight:600;margin-left:4px;}" +
-      "#wcCupRecPage .crzip{height:32px;padding:0 12px;border:1px solid #ff7900;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;}" +
-      "#wcCupRecPage .crzip:disabled{opacity:.45;cursor:default;}" +
-      "#wcCupRecPage .crcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}" +
-      "#wcCupRecPage .crcard img{width:100%;display:block;border:1px solid #eef0f3;border-radius:10px;}" +
-      "#wcCupRecPage .crcard .r{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;font-size:12.5px;font-weight:700;color:#191f28;}" +
-      "#wcCupRecPage .crcard button{height:28px;padding:0 10px;border:1px solid #e5e8eb;border-radius:7px;background:#fff;font-family:inherit;font-size:12px;font-weight:700;color:#4e5968;cursor:pointer;}" +
-      "#wcCupRecPage .crem{padding:30px 0;text-align:center;color:#8b95a1;font-size:13px;}" +
-      "@media (max-width:1100px){#wcCupRecPage .crgrid{grid-template-columns:1fr;}#wcCupRecPage .crdet{position:static;}}" +
-      "@media (max-width:600px){#wcCupRecPage .crq{min-width:0;flex:1;}#wcCupRecPage .crlist{padding:4px 8px 8px;}" +
-      "#wcCupRecPage .crlist.s .crhead{display:none;}#wcCupRecPage .crlist.s .crrow{grid-template-columns:1fr auto;row-gap:4px;}" +
-      "#wcCupRecPage .crlist.s .crrow .c1{grid-column:1/-1;font-size:12px;color:#8b95a1;}#wcCupRecPage .crlist.s .crrow .c3{justify-self:end;}" +
-      "#wcCupRecPage .crlist.s .crrow .c4,#wcCupRecPage .crlist.s .crrow .c5,#wcCupRecPage .crlist.s .crrow .c6{display:none;}" +
-      "#wcCupRecPage .crlist.s .crrow .c7{display:block!important;grid-column:1/-1;font-size:12px;color:#8b95a1;}" +
-      "#wcCupRecPage .crlist.b .crhead{display:none;}#wcCupRecPage .crlist.b .crrow{grid-template-columns:1fr auto;row-gap:3px;}#wcCupRecPage .crlist.b .crrow .c2{grid-column:1/2;font-size:12px;}}" +
-      "#wcCupRecPage .crrow .c7{display:none;}";
+      P + ".crtop{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px;}" +
+      P + ".crseg{display:inline-flex;border:1px solid #e5e8eb;border-radius:9px;overflow:hidden;background:#fff;}" +
+      P + ".crseg button{height:34px;padding:0 14px;border:none;background:#fff;font-family:inherit;font-size:13px;font-weight:700;color:#8b95a1;cursor:pointer;}" +
+      P + ".crseg button+button{border-left:1px solid #e5e8eb;}" + P + ".crseg button.on{color:#ea6f00;box-shadow:inset 0 -2px 0 #ff7900;}" +
+      P + ".crq{height:34px;border:1px solid #e5e8eb;border-radius:9px;padding:0 12px;font-family:inherit;font-size:13px;width:240px;background:#fff;}" +
+      P + ".crlist{background:#fff;border:1px solid #e5e8eb;border-radius:16px;padding:6px 18px 10px;}" +
+      P + ".crhead," + P + ".crrow{display:grid;gap:10px;align-items:center;padding:0 8px;}" +
+      P + ".crlist.s .crhead," + P + ".crlist.s .crrow{grid-template-columns:130px minmax(0,1fr) 70px 60px 60px 60px 18px;}" +
+      P + ".crlist.b .crhead," + P + ".crlist.b .crrow{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 60px 18px;}" +
+      P + ".crhead{font-size:12px;font-weight:700;color:#8b95a1;padding-top:12px;padding-bottom:9px;border-bottom:1px solid #e5e8eb;}" +
+      P + ".crrow{width:100%;border:none;border-bottom:1px solid #f2f4f6;background:#fff;font-family:inherit;text-align:left;font-size:13.5px;color:#191f28;padding-top:13px;padding-bottom:13px;cursor:pointer;border-radius:0;}" +
+      P + ".crrow:last-child{border-bottom:none;}" + P + ".crrow:hover{background:#fffaf5;}" +
+      P + ".crrow > span{min-width:0;word-break:keep-all;}" + P + ".crrow .nw{white-space:nowrap;}" + P + ".crrow .cv{color:#c4ccd4;display:inline-flex;}" +
+      P + ".g{color:#8b95a1;}" + P + ".crrow .c7{display:none;}" +
+      P + ".crem{padding:34px 0;text-align:center;color:#8b95a1;font-size:13px;}" +
+      P + ".crdh{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}" +
+      P + ".crback{height:34px;padding:0 13px;border:1px solid #e5e8eb;border-radius:9px;background:#fff;font-family:inherit;font-size:13px;font-weight:700;color:#4e5968;cursor:pointer;}" +
+      P + ".crdt{font-size:17px;font-weight:800;color:#191f28;}" + P + ".crdm{font-size:13px;color:#8b95a1;}" +
+      P + ".crexp{margin-left:auto;height:34px;padding:0 13px;border:1px solid #ff7900;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}" +
+      P + ".crpanel{background:#fff;border:1px solid #e5e8eb;border-radius:16px;padding:18px 20px 22px;}" +
+      P + ".crbeans{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}" +
+      P + ".crbean{border:1px solid #e5e8eb;border-radius:10px;padding:9px 13px;background:#fff;font-family:inherit;font-size:13px;font-weight:600;color:#191f28;cursor:pointer;text-align:left;}" +
+      P + ".crbean span{color:#8b95a1;font-weight:500;margin-left:6px;font-size:12px;}" +
+      P + ".crbean.on{border-color:#ff7900;color:#ea6f00;font-weight:700;}" + P + ".crbean.on span{color:#ea6f00;}" +
+      "@media (max-width:600px){" + P + ".crq{width:auto;flex:1;min-width:0;}" + P + ".crlist{padding:4px 10px 8px;}" + P + ".crexp{margin-left:0;}" +
+        P + ".crhead{display:none!important;}" +
+        P + ".crlist.s .crrow{grid-template-columns:1fr auto;row-gap:3px;}" + P + ".crlist.s .crrow .c1{grid-column:1/-1;font-size:12px;color:#8b95a1;}" +
+        P + ".crlist.s .crrow .c3," + P + ".crlist.s .crrow .c4," + P + ".crlist.s .crrow .c5," + P + ".crlist.s .crrow .c6{display:none;}" +
+        P + ".crlist.s .crrow .c7{display:block;grid-column:1/2;font-size:12px;color:#8b95a1;}" + P + ".crlist.s .crrow .cv{grid-row:2/4;grid-column:2;}" +
+        P + ".crlist.b .crrow{grid-template-columns:1fr auto;row-gap:3px;}" + P + ".crlist.b .crrow .c2{font-size:12px;}" + P + ".crlist.b .crrow .c3{grid-row:1;grid-column:2;}" + P + ".crlist.b .crrow .cv{display:none;}" +
+      "}";
     document.head.appendChild(st);
   }
   function crInject() {
@@ -8328,23 +8323,20 @@ window.hideCalibration = async function() {
     nav.innerHTML = '<button type="button" class="sub-item active" data-gtab="g">멤버별 성장</button><button type="button" class="sub-item" data-gtab="c">커핑 기록</button>';
     head.parentNode.insertBefore(nav, head.nextSibling);
     var pg = document.createElement("div"); pg.id = "wcCupRecPage";
-    pg.innerHTML =
-      '<div class="crtop"><div class="crbar"><div class="crseg"><button type="button" data-crv="s" class="on">회차별</button><button type="button" data-crv="b">원두별</button></div>' +
-        '<input class="crq" id="crQ" type="search" placeholder="세션명 · 원두 검색"></div></div>' +
-      '<div class="crgrid"><div class="crlist" id="crList"><div class="crem">불러오는 중…</div></div>' +
-      '<div class="crdet" id="crDet"><div class="crem">왼쪽에서 회차나 원두를 고르면 평가 카드가 나와요.</div></div></div>';
+    pg.innerHTML = '<div id="crListView"><div class="crtop"><div class="crseg"><button type="button" data-crv="s" class="on">회차별</button><button type="button" data-crv="b">원두별</button></div>' +
+      '<input class="crq" id="crQ" type="search" placeholder="세션명 · 원두 검색"></div><div class="crlist s" id="crList"><div class="crem">불러오는 중…</div></div></div>' +
+      '<div id="crDetView" style="display:none;"></div>';
     card.parentNode.insertBefore(pg, card.nextSibling);
     nav.addEventListener("click", function (e) { var t = e.target.closest("[data-gtab]"); if (t) crTab(t.getAttribute("data-gtab")); });
     pg.addEventListener("click", function (e) {
       var v = e.target.closest("[data-crv]");
       if (v) { CR.view = v.getAttribute("data-crv"); pg.querySelectorAll("[data-crv]").forEach(function (x) { x.classList.toggle("on", x === v); }); crList(); return; }
       var row = e.target.closest(".crrow[data-sid]");
-      if (row) { crSelect(row.getAttribute("data-sid"), row.getAttribute("data-bid") || null); return; }
+      if (row) { crOpen(row.getAttribute("data-sid"), row.getAttribute("data-bid") || null); return; }
+      if (e.target.closest("[data-crback]")) { crBack(); return; }
       var bb = e.target.closest("[data-crbean]");
-      if (bb) { crSelect(CR.selS, bb.getAttribute("data-crbean")); return; }
-      var sv = e.target.closest("[data-crsave]");
-      if (sv) { var i = +sv.getAttribute("data-crsave"); if (CR.blobs[i]) download(CR.blobs[i], fileName(CR.cards[i])); return; }
-      if (e.target.closest("[data-crzip]")) { crZip(); return; }
+      if (bb) { crBean(bb.getAttribute("data-crbean")); return; }
+      if (e.target.closest("[data-crexp]")) { window.wcCardOpen(String(CR.selS), String(CR.selB || "")); return; }
     });
     _$("crQ").addEventListener("input", function () { CR.q = this.value.trim(); crList(); });
     return true;
@@ -8364,20 +8356,20 @@ window.hideCalibration = async function() {
       var r = await Promise.all([
         fetchAll("cupping_sessions", "id,title,scheduled_at,center,created_via"),
         fetchAll("cupping_beans", "id,session_id,name,sort_order"),
-        fetchAll("cupping_records", "session_id,bean_id,participant_id,form_type"),
-        fetchAll("cupping_references", "bean_id,int_fragrance,int_aroma,int_flavor")
+        fetchAll("cupping_records", "session_id,bean_id,participant_id,form_type")
       ]);
       var beans = {}; r[1].forEach(function (b) { (beans[b.session_id] = beans[b.session_id] || []).push(b); });
       Object.keys(beans).forEach(function (k) { beans[k].sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); }); });
-      var cnt = {};   // sid -> {n, people:{}, bean:{bid:{pid}}}
+      var cnt = {};
       r[2].forEach(function (x) {
         if (x.form_type === "basic") return;
         var c = cnt[x.session_id] = cnt[x.session_id] || { n: 0, people: {}, bean: {} };
         c.n++; c.people[x.participant_id] = 1; (c.bean[x.bean_id] = c.bean[x.bean_id] || {})[x.participant_id] = 1;
       });
-      var refB = {}; r[3].forEach(function (x) { if (x.int_fragrance != null || x.int_aroma != null || x.int_flavor != null) refB[x.bean_id] = 1; });
-      CR.sess = r[0].filter(function (s) { return s.created_via !== "member" && cnt[s.id] && cnt[s.id].n; })   // 센서리 훈련 커핑만 (멤버가 연 세션 제외).sort(function (a, b) { return new Date(b.scheduled_at || 0) - new Date(a.scheduled_at || 0); });
-      CR.beans = beans; CR.cnt = cnt; CR.refBeans = refB; CR.loaded = true;
+      // 센서리 훈련 커핑만 (멤버가 연 세션 제외) · 최신 날짜가 위
+      CR.sess = r[0].filter(function (s) { return s.created_via !== "member" && cnt[s.id] && cnt[s.id].n; });
+      CR.sess.sort(function (a, b) { return (new Date(b.scheduled_at || 0).getTime() || 0) - (new Date(a.scheduled_at || 0).getTime() || 0); });
+      CR.beans = beans; CR.cnt = cnt; CR.loaded = true;
     } catch (e) {
       console.error("[커핑 기록] 불러오기 실패", e);
       var L = _$("crList"); if (L) L.innerHTML = '<div class="crem">불러오지 못했어요. 새로고침 후 다시 시도해 주세요.</div>';
@@ -8385,12 +8377,6 @@ window.hideCalibration = async function() {
     CR.busy = false;
     if (CR.loaded) crList();
   }
-  function sessKind(s) {
-    if (s.created_via === "member") return '<span class="crtag m">멤버 세션</span>';
-    var cal = (CR.beans[s.id] || []).some(function (b) { return CR.refBeans[b.id]; });
-    return '<span class="crtag' + (cal ? '' : ' m') + '">' + (cal ? '캘리브레이션' : '센서리 훈련') + '</span>';
-  }
-  function shortDate(s) { var d = new Date(s); if (!s || isNaN(d)) return "—"; return String(d.getFullYear()).slice(2) + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + DOW[d.getDay()] + ")"; }
   function crList() {
     var L = _$("crList"); if (!L || !CR.loaded) return;
     var q = nk(CR.q), h = "";
@@ -8398,67 +8384,75 @@ window.hideCalibration = async function() {
     if (CR.view === "s") {
       var list = CR.sess.filter(function (s) { return !q || nk(s.title).indexOf(q) >= 0 || (CR.beans[s.id] || []).some(function (b) { return nk(b.name).indexOf(q) >= 0; }); });
       if (!list.length) { L.innerHTML = '<div class="crem">' + (q ? '검색 결과가 없어요.' : '평가 기록이 있는 센서리 훈련 커핑이 없어요.') + '</div>'; return; }
-      h = '<div class="crhead"><span>날짜</span><span>세션</span><span>종류</span><span>원두</span><span>참가</span><span>평가</span></div>' + list.map(function (s) {
+      h = '<div class="crhead"><span>날짜</span><span>세션</span><span>센터</span><span>원두</span><span>참가</span><span>평가</span><span></span></div>' + list.map(function (s) {
         var c = CR.cnt[s.id] || { n: 0, people: {} }, nb = (CR.beans[s.id] || []).length, np = Object.keys(c.people).length;
-        return '<button type="button" class="crrow' + (String(CR.selS) === String(s.id) && !CR.selFromBean ? ' on' : '') + '" data-sid="' + esc(s.id) + '">' +
-          '<span class="c1 nw">' + shortDate(s.scheduled_at) + '</span><span class="c2">' + esc(s.title || "커핑 세션") + '</span><span class="c3">' + sessKind(s) + '</span>' +
+        return '<button type="button" class="crrow" data-sid="' + esc(s.id) + '">' +
+          '<span class="c1 nw">' + shortDate(s.scheduled_at) + '</span><span class="c2">' + esc(s.title || "센서리 훈련 커핑") + '</span><span class="c3 nw">' + esc(centerTxt(s.center) || "—") + '</span>' +
           '<span class="c4 nw">' + nb + '종</span><span class="c5 nw">' + np + '명</span><span class="c6 nw">' + c.n + '건</span>' +
-          '<span class="c7">원두 ' + nb + '종 · 참가 ' + np + '명 · 평가 ' + c.n + '건</span></button>';
+          '<span class="c7">' + [centerTxt(s.center), '원두 ' + nb + '종', '참가 ' + np + '명'].filter(Boolean).join(" · ") + '</span><span class="cv">' + CHEV + '</span></button>';
       }).join("");
     } else {
       var rows = [];
       CR.sess.forEach(function (s) { (CR.beans[s.id] || []).forEach(function (b) { var pc = Object.keys(((CR.cnt[s.id] || {}).bean || {})[b.id] || {}).length; if (pc && (!q || nk(b.name).indexOf(q) >= 0)) rows.push({ s: s, b: b, n: pc }); }); });
-      rows.sort(function (a, b) { return String(a.b.name).localeCompare(String(b.b.name), "ko") || (new Date(b.s.scheduled_at || 0) - new Date(a.s.scheduled_at || 0)); });
+      rows.sort(function (a, b) { return String(a.b.name).localeCompare(String(b.b.name), "ko") || ((new Date(b.s.scheduled_at || 0).getTime() || 0) - (new Date(a.s.scheduled_at || 0).getTime() || 0)); });
       if (!rows.length) { L.innerHTML = '<div class="crem">' + (q ? '검색 결과가 없어요.' : '평가 기록이 있는 원두가 없어요.') + '</div>'; return; }
-      h = '<div class="crhead"><span>원두</span><span>날짜 · 세션</span><span>평가</span></div>' + rows.map(function (x) {
-        var on = String(CR.selS) === String(x.s.id) && String(CR.selB) === String(x.b.id) && CR.selFromBean;
-        return '<button type="button" class="crrow' + (on ? ' on' : '') + '" data-sid="' + esc(x.s.id) + '" data-bid="' + esc(x.b.id) + '"><span class="c1">' + esc(x.b.name) + '</span><span class="c2"><span class="g">' + shortDate(x.s.scheduled_at) + ' · </span>' + esc(x.s.title || "커핑 세션") + '</span><span class="c3 nw">' + x.n + '명</span></button>';
+      h = '<div class="crhead"><span>원두</span><span>날짜 · 세션</span><span>평가</span><span></span></div>' + rows.map(function (x) {
+        return '<button type="button" class="crrow" data-sid="' + esc(x.s.id) + '" data-bid="' + esc(x.b.id) + '"><span class="c1">' + esc(x.b.name) + '</span><span class="c2"><span class="g">' + shortDate(x.s.scheduled_at) + ' · </span>' + esc(x.s.title || "센서리 훈련 커핑") + '</span><span class="c3 nw">' + x.n + '명</span><span class="cv">' + CHEV + '</span></button>';
       }).join("");
     }
     L.innerHTML = h;
   }
-  function crFree() { CR.urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); CR.urls = []; CR.cards = []; CR.blobs = []; }
-  async function crSelect(sid, bid) {
+  function crBack() {
+    CR.mode = "list"; CR.seq++;
+    _$("crDetView").style.display = "none"; _$("crDetView").innerHTML = "";
+    _$("crListView").style.display = "";
+  }
+  async function crOpen(sid, bid) {
     var s = CR.sess.filter(function (x) { return String(x.id) === String(sid); })[0]; if (!s) return;
-    CR.selFromBean = CR.view === "b" && !!bid;
     var beans = CR.beans[s.id] || [], bc = (CR.cnt[s.id] || {}).bean || {};
     if (!bid) { var fb = beans.filter(function (b) { return Object.keys(bc[b.id] || {}).length; })[0] || beans[0]; bid = fb ? fb.id : null; }
-    CR.selS = s.id; CR.selB = bid; crList();
-    var D = _$("crDet"); if (!D) return;
+    CR.mode = "det"; CR.selS = s.id; CR.selB = bid;
+    _$("crListView").style.display = "none";
+    var D = _$("crDetView"); D.style.display = "";
     var c = CR.cnt[s.id] || { people: {} };
-    D.innerHTML = '<div class="h">' + esc(s.title || "커핑 세션") + '</div><div class="m">' + [dateTxt(s.scheduled_at), centerTxt(s.center), "참가 " + Object.keys(c.people).length + "명"].filter(Boolean).join(" · ") + '</div>' +
-      '<div class="crbeans">' + beans.map(function (b, i) { var n = Object.keys(bc[b.id] || {}).length; return '<button type="button" class="crbean' + (String(b.id) === String(bid) ? ' on' : '') + '" data-crbean="' + esc(b.id) + '">' + (i + 1) + ". " + esc(b.name) + '<span>' + n + '명 평가</span></button>'; }).join("") + '</div>' +
-      '<div class="cracts"><b>평가 카드<span id="crN"></span></b><button type="button" class="crzip" data-crzip="1" id="crZip" disabled>전체 저장 (zip)</button></div>' +
-      '<div id="crCards"><div class="crem">카드 만드는 중…</div></div>';
-    if (window.innerWidth <= 1100) { try { D.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} }
-    if (!bid) { _$("crCards").innerHTML = '<div class="crem">원두가 없어요.</div>'; return; }
-    var my = ++CR.seq; crFree();
+    D.innerHTML = '<div class="crdh"><button type="button" class="crback" data-crback="1">← 목록</button>' +
+      '<span class="crdt">' + esc(s.title || "센서리 훈련 커핑") + '</span><span class="crdm">' + [dateTxt(s.scheduled_at), centerTxt(s.center), "참가 " + Object.keys(c.people).length + "명"].filter(Boolean).join(" · ") + '</span>' +
+      '<button type="button" class="crexp" data-crexp="1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>평가 카드 내보내기</button></div>' +
+      '<div class="crpanel"><div class="crbeans">' + beans.map(function (b, i) { var n = Object.keys(bc[b.id] || {}).length; return '<button type="button" class="crbean' + (String(b.id) === String(bid) ? ' on' : '') + '" data-crbean="' + esc(b.id) + '">' + (i + 1) + ". " + esc(b.name) + '<span>' + n + '명</span></button>'; }).join("") + '</div>' +
+      '<div id="crRv"><div class="crem">불러오는 중…</div></div></div>';
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
+    // 세션 정보(평가 방식 안내 배너용) — 결과보기가 window._cuppingSession 을 봄
+    try { var sr = await supabaseClient.from("cupping_sessions").select("*").eq("id", s.id).maybeSingle(); if (sr.data) { s._full = sr.data; } } catch (e) {}
+    if (bid) crBean(bid); else _$("crRv").innerHTML = '<div class="crem">원두가 없어요.</div>';
+  }
+  async function crBean(bid) {
+    var sid = CR.selS; CR.selB = bid;
+    document.querySelectorAll("#crDetView .crbean").forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-crbean") === String(bid)); });
+    var box = _$("crRv"); if (!box) return;
+    box.innerHTML = '<div class="crem">불러오는 중…</div>';
+    var my = ++CR.seq;
     try {
-      var d = await loadCardData(s.id, bid); if (my !== CR.seq) return;
-      var cards = buildCards(d);
-      if (!cards.length) { _$("crCards").innerHTML = '<div class="crem">이 원두에 입력된 평가가 없어요.</div>'; return; }
-      await ensureFonts(cards); if (my !== CR.seq) return;
-      var blobs = [];
-      for (var i = 0; i < cards.length; i++) { blobs.push(await canvasBlob(drawCard(cards[i]))); if (my !== CR.seq) return; }
-      CR.cards = cards; CR.blobs = blobs;
-      _$("crCards").innerHTML = '<div class="crcards">' + cards.map(function (cd, i) {
-        var u = URL.createObjectURL(blobs[i]); CR.urls.push(u);
-        return '<div class="crcard"><img src="' + u + '" alt=""><div class="r"><span>' + esc((cd.batch ? cd.batch + " " : "") + cd.shown) + '</span><button type="button" data-crsave="' + i + '">저장</button></div></div>';
-      }).join("") + '</div>';
-      if (_$("crN")) _$("crN").textContent = cards.length + "장";
-      if (_$("crZip")) _$("crZip").disabled = false;
+      var s = CR.sess.filter(function (x) { return String(x.id) === String(sid); })[0] || {};
+      var res = await Promise.all([
+        supabaseClient.from("cupping_records").select("*").eq("session_id", sid).eq("bean_id", bid),
+        supabaseClient.from("cupping_references").select("*").eq("bean_id", bid).maybeSingle(),
+        supabaseClient.from("cupping_participants").select("id,member_id,guest_name,members(name,batch)").eq("session_id", sid)
+      ]);
+      if (my !== CR.seq) return;
+      if (res[0].error) throw res[0].error;
+      var names = {};
+      (res[2].data || []).forEach(function (p) { var b = p.member_id ? cleanBatch(p.members && p.members.batch) : "게스트"; var n = p.member_id ? ((p.members && p.members.name) || "멤버") : (p.guest_name || "게스트"); names[p.id] = (b ? b + " " : "") + n; });
+      var bn = ((CR.beans[sid] || []).filter(function (b) { return String(b.id) === String(bid); })[0] || {}).name || "";
+      // 세션 창의 결과보기가 남긴 같은 id 요소와 겹치지 않게 비움
+      var old = _$("cupRvBody"); if (old) old.innerHTML = "";
+      if (s._full) window._cuppingSession = s._full;
+      box.innerHTML = typeof window.wcRenderReview === "function" ? window.wcRenderReview(res[0].data || [], res[1].data || null, names, bn) : '<div class="crem">결과보기 모듈이 없어요.</div>';
     } catch (e) {
-      console.error("[커핑 기록] 카드 만들기 실패", e);
-      if (my === CR.seq && _$("crCards")) _$("crCards").innerHTML = '<div class="crem">카드를 만들지 못했어요. 새로고침 후 다시 시도해 주세요.</div>';
+      console.error("[커핑 기록] 결과 불러오기 실패", e);
+      if (my === CR.seq) box.innerHTML = '<div class="crem">불러오지 못했어요. 새로고침 후 다시 시도해 주세요.</div>';
     }
   }
-  async function crZip() {
-    if (!CR.blobs.length) return;
-    var files = [];
-    for (var i = 0; i < CR.blobs.length; i++) files.push({ name: fileName(CR.cards[i]), data: new Uint8Array(await CR.blobs[i].arrayBuffer()) });
-    var c0 = CR.cards[0];
-    download(makeZip(files), "커핑평가카드_" + safeName(c0.title || "세션") + "_" + safeName(c0.bean) + ".zip");
-  }
+
   // 성장 현황을 열 때마다 탭 줄을 붙이고 '멤버별 성장'으로 시작
   document.addEventListener("click", function (e) { if (e.target && e.target.closest && e.target.closest("#wcGrowthBtn")) setTimeout(function () { crTab("g"); }, 0); }, true);
   (function crBoot() {
