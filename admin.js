@@ -8174,7 +8174,16 @@ window.hideCalibration = async function() {
       "#wcCardOly .all{margin-left:auto;height:36px;padding:0 14px;border:1px solid #ff7900;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}" +
       "#wcCardOly .all:disabled{opacity:.45;cursor:default;}" +
       "#wcCardOly .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px;}" +
-      "#wcCardOly .it img{width:100%;display:block;border:1px solid #eef0f3;border-radius:12px;}" +
+      "#wcCardOly .it img{width:100%;display:block;border:1px solid #eef0f3;border-radius:12px;cursor:zoom-in;transition:box-shadow .15s;}" +
+      "#wcCardOly .it img:hover{box-shadow:0 6px 20px rgba(0,0,0,.12);}" +
+      "#wcCardZoom{position:fixed;inset:0;z-index:100001;background:rgba(25,31,40,.72);display:flex;align-items:center;justify-content:center;font-family:Pretendard,sans-serif;}" +
+      "#wcCardZoom .zt{position:absolute;top:16px;left:20px;right:20px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#fff;font-size:14px;font-weight:700;}" +
+      "#wcCardZoom .zt span{display:inline-flex;gap:8px;}" +
+      "#wcCardZoom .zb{height:36px;padding:0 14px;border:none;border-radius:9px;background:#fff;color:#191f28;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}" +
+      "#wcCardZoom img{max-width:min(92vw,620px);max-height:calc(100vh - 110px);border-radius:14px;display:block;box-shadow:0 20px 60px rgba(0,0,0,.35);}" +
+      "#wcCardZoom .zn{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border:none;border-radius:50%;background:#fff;color:#4e5968;cursor:pointer;display:flex;align-items:center;justify-content:center;}" +
+      "#wcCardZoom .zn:disabled{opacity:.35;cursor:default;}#wcCardZoom .zl{left:max(16px,calc(50% - 390px));}#wcCardZoom .zr{right:max(16px,calc(50% - 390px));}" +
+      "@media (max-width:600px){#wcCardZoom .zn{width:38px;height:38px;top:auto;bottom:20px;transform:none;}#wcCardZoom .zl{left:calc(50% - 50px);}#wcCardZoom .zr{right:calc(50% - 50px);}#wcCardZoom img{max-height:calc(100vh - 150px);}}" +
       "#wcCardOly .it .r{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:13px;font-weight:700;color:#191f28;}" +
       "#wcCardOly .it button{height:30px;padding:0 11px;border:1px solid #e5e8eb;border-radius:8px;background:#fff;color:#4e5968;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}" +
       "#wcCardOly .em{padding:40px 0;text-align:center;color:#8b95a1;font-size:13px;}" +
@@ -8182,7 +8191,7 @@ window.hideCalibration = async function() {
     document.head.appendChild(st);
   }
   function freeUrls() { M.urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); M.urls = []; }
-  window.wcCardClose = function () { freeUrls(); var o = _$("wcCardOly"); if (o) o.remove(); };
+  window.wcCardClose = function () { if (window.wcCardZoomClose) window.wcCardZoomClose(); freeUrls(); var o = _$("wcCardOly"); if (o) o.remove(); };
   window.wcCardOpen = async function (sid0, bean0) {
     var sid = (typeof sid0 === "string" && sid0) ? sid0 : curSid(); if (!sid) { toast("세션을 먼저 열어 주세요."); return; }
     var beans = beansOf(sid);
@@ -8217,7 +8226,7 @@ window.hideCalibration = async function() {
       M.cards = cards; M.blobs = blobs;
       grid.innerHTML = '<div class="grid">' + cards.map(function (c, i) {
         var u = URL.createObjectURL(blobs[i]); M.urls.push(u);
-        return '<div class="it"><img src="' + u + '" alt=""><div class="r"><span>' + esc((c.batch ? c.batch + " " : "") + c.shown) + '</span><button type="button" onclick="window.wcCardSave(' + i + ')">저장</button></div></div>';
+        return '<div class="it"><img src="' + u + '" alt="" title="크게 보기" onclick="window.wcCardZoom(' + i + ')"><div class="r"><span>' + esc((c.batch ? c.batch + " " : "") + c.shown) + '</span><button type="button" onclick="window.wcCardSave(' + i + ')">저장</button></div></div>';
       }).join("") + '</div>';
       if (nEl) nEl.textContent = cards.length + "명";
       if (all) all.disabled = false;
@@ -8227,6 +8236,27 @@ window.hideCalibration = async function() {
     }
   }
   window.wcCardSave = function (i) { if (M.blobs[i]) download(M.blobs[i], fileName(M.cards[i])); };
+  /* ── 카드 크게 보기 (‹ › 넘기기 · 저장 · Esc/바깥 누르면 닫기) ── */
+  var Z = -1;
+  function zoomKey(e) { if (Z < 0) return; if (e.key === "Escape") { e.stopPropagation(); window.wcCardZoomClose(); } else if (e.key === "ArrowLeft") window.wcCardZoom(Z - 1); else if (e.key === "ArrowRight") window.wcCardZoom(Z + 1); }
+  window.wcCardZoom = function (i) {
+    if (i < 0 || i >= M.urls.length) return;
+    Z = i;
+    var z = _$("wcCardZoom");
+    if (!z) {
+      z = document.createElement("div"); z.id = "wcCardZoom";
+      z.addEventListener("click", function (e) { if (e.target === z) window.wcCardZoomClose(); });
+      document.body.appendChild(z);
+      document.addEventListener("keydown", zoomKey, true);
+    }
+    var c = M.cards[i], N = M.urls.length;
+    var arrow = function (d) { return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="' + (d < 0 ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6') + '"/></svg>'; };
+    z.innerHTML = '<div class="zt"><div>' + (i + 1) + ' / ' + N + ' · ' + esc((c.batch ? c.batch + " " : "") + c.shown) + '</div><span><button type="button" class="zb" onclick="window.wcCardSave(' + i + ')">저장</button><button type="button" class="zb" onclick="window.wcCardZoomClose()">닫기</button></span></div>' +
+      '<button type="button" class="zn zl" aria-label="이전" ' + (i ? '' : 'disabled ') + 'onclick="window.wcCardZoom(' + (i - 1) + ')">' + arrow(-1) + '</button>' +
+      '<img src="' + M.urls[i] + '" alt="">' +
+      '<button type="button" class="zn zr" aria-label="다음" ' + (i < N - 1 ? '' : 'disabled ') + 'onclick="window.wcCardZoom(' + (i + 1) + ')">' + arrow(1) + '</button>';
+  };
+  window.wcCardZoomClose = function () { Z = -1; var z = _$("wcCardZoom"); if (z) z.remove(); document.removeEventListener("keydown", zoomKey, true); };
   window.wcCardSaveAll = async function () {
     if (!M.blobs.length) return;
     var files = [];
