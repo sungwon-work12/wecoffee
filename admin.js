@@ -8252,7 +8252,7 @@ window.hideCalibration = async function() {
   document.addEventListener("click", function (e) { if (e.target && e.target.closest && e.target.closest("#cupRvBtn")) setTimeout(injectBtn, 0); }, true);
   window.wcCardDraw = drawCard;   // 검증용
 
-  /* ═══════════════ 1-2. 멤버 리스트 > '커핑 기록' (11-02 · 성장 현황 옆 버튼, 같은 인페이지 방식) ═══════════════
+  /* ═══════════════ 1-2. 성장 현황 > 하위 탭 '커핑 기록' (11-02 · 관리자 공통 탭 줄 .sub-nav 사용) ═══════════════
      · 지난 세션까지 전부 · 회차별 / 원두별 → 원두 고르면 참가자 전원 평가 카드
      · 카드마다 '저장' = PNG 바로 저장 · '전체 저장' = zip */
   var CR = { loaded: false, busy: false, view: "s", q: "", sess: [], beans: {}, cnt: {}, refBeans: {}, selS: null, selB: null, cards: [], blobs: [], urls: [], seq: 0 };
@@ -8271,7 +8271,8 @@ window.hideCalibration = async function() {
     if (_$("wcCrStyle")) return;
     var st = document.createElement("style"); st.id = "wcCrStyle";
     st.textContent =
-      "#page-members.wc-cr > :not(#wcCupRecPage){display:none!important;}#wcCupRecPage{display:none;}#page-members.wc-cr #wcCupRecPage{display:block;}" +
+      "#wcGrowthSubNav{margin:0 0 18px;}#wcCupRecPage{display:none;}#wcGrowthPage.wc-tab-c #wcCupRecPage{display:block;}#wcGrowthPage.wc-tab-c .wcgr-mainbox{display:none!important;}" +
+      "#wcCupRecPage .crtop{display:flex;justify-content:flex-end;margin-bottom:14px;}" +
       "#wcCupRecPage .crbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}" +
       "#wcCupRecPage .crseg{display:inline-flex;border:1px solid #e5e8eb;border-radius:9px;overflow:hidden;background:#fff;}" +
       "#wcCupRecPage .crseg button{height:34px;padding:0 14px;border:none;background:#fff;font-family:inherit;font-size:13px;font-weight:700;color:#8b95a1;cursor:pointer;}" +
@@ -8280,12 +8281,13 @@ window.hideCalibration = async function() {
       "#wcCupRecPage .crq{height:34px;border:1px solid #e5e8eb;border-radius:9px;padding:0 12px;font-family:inherit;font-size:13px;min-width:220px;background:#fff;}" +
       "#wcCupRecPage .crgrid{display:grid;grid-template-columns:minmax(0,1fr) 480px;gap:18px;align-items:start;}" +
       "#wcCupRecPage .crlist{background:#fff;border:1px solid #e5e8eb;border-radius:16px;padding:6px 16px 10px;}" +
-      "#wcCupRecPage .crlist table{width:100%;border-collapse:collapse;}" +
-      "#wcCupRecPage .crlist th{font-size:12px;font-weight:700;color:#8b95a1;text-align:left;padding:12px 8px 9px;border-bottom:1px solid #e5e8eb;white-space:nowrap;}" +
-      "#wcCupRecPage .crlist td{font-size:13px;color:#191f28;padding:12px 8px;border-bottom:1px solid #f2f4f6;white-space:nowrap;}" +
-      "#wcCupRecPage .crlist td.w{white-space:normal;word-break:keep-all;}" +
-      "#wcCupRecPage .crlist tr.r{cursor:pointer;}#wcCupRecPage .crlist tr.r:hover td{background:#fffaf5;}" +
-      "#wcCupRecPage .crlist tr.on td{background:#fffaf5;font-weight:700;}" +
+      "#wcCupRecPage .crhead,#wcCupRecPage .crrow{display:grid;gap:10px;align-items:center;padding:0 8px;}" +
+      "#wcCupRecPage .crlist.s .crhead,#wcCupRecPage .crlist.s .crrow{grid-template-columns:118px minmax(0,1fr) 92px 44px 44px 50px;}" +
+      "#wcCupRecPage .crlist.b .crhead,#wcCupRecPage .crlist.b .crrow{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 50px;}" +
+      "#wcCupRecPage .crhead{font-size:12px;font-weight:700;color:#8b95a1;padding-top:12px;padding-bottom:9px;border-bottom:1px solid #e5e8eb;}" +
+      "#wcCupRecPage .crrow{width:100%;border:none;border-bottom:1px solid #f2f4f6;background:#fff;font-family:inherit;text-align:left;font-size:13px;color:#191f28;padding-top:12px;padding-bottom:12px;cursor:pointer;border-radius:0;}" +
+      "#wcCupRecPage .crrow:hover{background:#fffaf5;}#wcCupRecPage .crrow.on{background:#fffaf5;font-weight:700;}" +
+      "#wcCupRecPage .crrow > span{min-width:0;word-break:keep-all;}#wcCupRecPage .crrow .nw{white-space:nowrap;}" +
       "#wcCupRecPage .crlist .g{color:#8b95a1;}" +
       "#wcCupRecPage .crtag{font-size:11px;font-weight:800;border:1px solid #ffd7b5;color:#ea6f00;border-radius:6px;padding:2px 6px;}" +
       "#wcCupRecPage .crtag.m{border-color:#e5e8eb;color:#4e5968;}" +
@@ -8306,37 +8308,37 @@ window.hideCalibration = async function() {
       "#wcCupRecPage .crcard button{height:28px;padding:0 10px;border:1px solid #e5e8eb;border-radius:7px;background:#fff;font-family:inherit;font-size:12px;font-weight:700;color:#4e5968;cursor:pointer;}" +
       "#wcCupRecPage .crem{padding:30px 0;text-align:center;color:#8b95a1;font-size:13px;}" +
       "@media (max-width:1100px){#wcCupRecPage .crgrid{grid-template-columns:1fr;}#wcCupRecPage .crdet{position:static;}}" +
-      "@media (max-width:600px){#wcCupRecPage .crq{min-width:0;flex:1;}#wcCupRecPage .crlist{padding:4px 10px 8px;overflow-x:auto;}}";
+      "@media (max-width:600px){#wcCupRecPage .crq{min-width:0;flex:1;}#wcCupRecPage .crlist{padding:4px 8px 8px;}" +
+      "#wcCupRecPage .crlist.s .crhead{display:none;}#wcCupRecPage .crlist.s .crrow{grid-template-columns:1fr auto;row-gap:4px;}" +
+      "#wcCupRecPage .crlist.s .crrow .c1{grid-column:1/-1;font-size:12px;color:#8b95a1;}#wcCupRecPage .crlist.s .crrow .c3{justify-self:end;}" +
+      "#wcCupRecPage .crlist.s .crrow .c4,#wcCupRecPage .crlist.s .crrow .c5,#wcCupRecPage .crlist.s .crrow .c6{display:none;}" +
+      "#wcCupRecPage .crlist.s .crrow .c7{display:block!important;grid-column:1/-1;font-size:12px;color:#8b95a1;}" +
+      "#wcCupRecPage .crlist.b .crhead{display:none;}#wcCupRecPage .crlist.b .crrow{grid-template-columns:1fr auto;row-gap:3px;}#wcCupRecPage .crlist.b .crrow .c2{grid-column:1/2;font-size:12px;}}" +
+      "#wcCupRecPage .crrow .c7{display:none;}";
     document.head.appendChild(st);
   }
   function crInject() {
-    var host = _$("page-members"); if (!host) return false;
+    var gp = _$("wcGrowthPage"); if (!gp) return false;
     crStyle();
-    if (!_$("wcCupRecBtn")) {
-      var gb = _$("wcGrowthBtn"); if (!gb) return false;
-      var b = document.createElement("button");
-      b.id = "wcCupRecBtn"; b.type = "button"; b.textContent = "커핑 기록";
-      b.style.cssText = gb.style.cssText;
-      b.onclick = window.wcCupRecOpen;
-      gb.parentNode.insertBefore(b, gb.nextSibling);
-    }
     if (_$("wcCupRecPage")) return true;
+    var head = gp.firstElementChild, card = head ? head.nextElementSibling : null;
+    if (!head || !card) return false;
+    card.classList.add("wcgr-mainbox");
+    var nav = document.createElement("div"); nav.className = "sub-nav"; nav.id = "wcGrowthSubNav";
+    nav.innerHTML = '<button type="button" class="sub-item active" data-gtab="g">멤버별 성장</button><button type="button" class="sub-item" data-gtab="c">커핑 기록</button>';
+    head.parentNode.insertBefore(nav, head.nextSibling);
     var pg = document.createElement("div"); pg.id = "wcCupRecPage";
-    pg.style.cssText = "font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;";
     pg.innerHTML =
-      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">' +
-        '<button type="button" onclick="window.wcCupRecClose()" style="height:36px;padding:0 14px;border:1px solid var(--border-strong,#e5e8eb);border-radius:10px;background:#fff;color:#4e5968;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;">← 멤버 리스트</button>' +
-        '<div style="font-size:20px;font-weight:800;color:var(--text-display,#191f28);">커핑 기록</div>' +
-        '<div class="crbar" style="margin-left:auto;"><div class="crseg"><button type="button" data-crv="s" class="on">회차별</button><button type="button" data-crv="b">원두별</button></div>' +
-        '<input class="crq" id="crQ" type="search" placeholder="세션명 · 원두 검색"></div>' +
-      '</div>' +
+      '<div class="crtop"><div class="crbar"><div class="crseg"><button type="button" data-crv="s" class="on">회차별</button><button type="button" data-crv="b">원두별</button></div>' +
+        '<input class="crq" id="crQ" type="search" placeholder="세션명 · 원두 검색"></div></div>' +
       '<div class="crgrid"><div class="crlist" id="crList"><div class="crem">불러오는 중…</div></div>' +
       '<div class="crdet" id="crDet"><div class="crem">왼쪽에서 회차나 원두를 고르면 평가 카드가 나와요.</div></div></div>';
-    host.appendChild(pg);
+    card.parentNode.insertBefore(pg, card.nextSibling);
+    nav.addEventListener("click", function (e) { var t = e.target.closest("[data-gtab]"); if (t) crTab(t.getAttribute("data-gtab")); });
     pg.addEventListener("click", function (e) {
       var v = e.target.closest("[data-crv]");
       if (v) { CR.view = v.getAttribute("data-crv"); pg.querySelectorAll("[data-crv]").forEach(function (x) { x.classList.toggle("on", x === v); }); crList(); return; }
-      var row = e.target.closest("tr[data-sid]");
+      var row = e.target.closest(".crrow[data-sid]");
       if (row) { crSelect(row.getAttribute("data-sid"), row.getAttribute("data-bid") || null); return; }
       var bb = e.target.closest("[data-crbean]");
       if (bb) { crSelect(CR.selS, bb.getAttribute("data-crbean")); return; }
@@ -8347,14 +8349,14 @@ window.hideCalibration = async function() {
     _$("crQ").addEventListener("input", function () { CR.q = this.value.trim(); crList(); });
     return true;
   }
-  window.wcCupRecOpen = function () {
-    var host = _$("page-members"); if (!host || !crInject()) return;
-    if (typeof window.wcGrowthRankClose === "function") window.wcGrowthRankClose();
-    host.classList.add("wc-cr");
-    try { window.scrollTo(0, 0); } catch (e) {}
-    crLoad(false);
-  };
-  window.wcCupRecClose = function () { var host = _$("page-members"); if (host) host.classList.remove("wc-cr"); };
+  // 탭 전환 (관리자 공통 탭 함수가 .sub-item 의 active 를 지울 수 있어서 매번 다시 칠함)
+  function crTab(t) {
+    var gp = _$("wcGrowthPage"); if (!gp || !crInject()) return;
+    gp.classList.toggle("wc-tab-c", t === "c");
+    gp.querySelectorAll("#wcGrowthSubNav [data-gtab]").forEach(function (x) { x.classList.toggle("active", x.getAttribute("data-gtab") === t); });
+    if (t === "c") crLoad(false);
+  }
+  window.wcCupRecOpen = function () { if (typeof window.wcGrowthRankOpen === "function") window.wcGrowthRankOpen(); setTimeout(function () { crTab("c"); }, 0); };
   async function crLoad(force) {
     if (CR.busy || (CR.loaded && !force)) return;
     CR.busy = true;
@@ -8374,7 +8376,7 @@ window.hideCalibration = async function() {
         c.n++; c.people[x.participant_id] = 1; (c.bean[x.bean_id] = c.bean[x.bean_id] || {})[x.participant_id] = 1;
       });
       var refB = {}; r[3].forEach(function (x) { if (x.int_fragrance != null || x.int_aroma != null || x.int_flavor != null) refB[x.bean_id] = 1; });
-      CR.sess = r[0].filter(function (s) { return cnt[s.id] && cnt[s.id].n; }).sort(function (a, b) { return new Date(b.scheduled_at || 0) - new Date(a.scheduled_at || 0); });
+      CR.sess = r[0].filter(function (s) { return s.created_via !== "member" && cnt[s.id] && cnt[s.id].n; })   // 센서리 훈련 커핑만 (멤버가 연 세션 제외).sort(function (a, b) { return new Date(b.scheduled_at || 0) - new Date(a.scheduled_at || 0); });
       CR.beans = beans; CR.cnt = cnt; CR.refBeans = refB; CR.loaded = true;
     } catch (e) {
       console.error("[커핑 기록] 불러오기 실패", e);
@@ -8392,22 +8394,26 @@ window.hideCalibration = async function() {
   function crList() {
     var L = _$("crList"); if (!L || !CR.loaded) return;
     var q = nk(CR.q), h = "";
+    L.className = "crlist " + CR.view;
     if (CR.view === "s") {
       var list = CR.sess.filter(function (s) { return !q || nk(s.title).indexOf(q) >= 0 || (CR.beans[s.id] || []).some(function (b) { return nk(b.name).indexOf(q) >= 0; }); });
-      if (!list.length) { L.innerHTML = '<div class="crem">' + (q ? '검색 결과가 없어요.' : '평가 기록이 있는 커핑 세션이 없어요.') + '</div>'; return; }
-      h = '<table><thead><tr><th>날짜</th><th>세션</th><th>종류</th><th>원두</th><th>참가</th><th>평가</th></tr></thead><tbody>' + list.map(function (s) {
-        var c = CR.cnt[s.id] || { n: 0, people: {} };
-        return '<tr class="r' + (String(CR.selS) === String(s.id) && !CR.selFromBean ? ' on' : '') + '" data-sid="' + esc(s.id) + '"><td>' + shortDate(s.scheduled_at) + '</td><td class="w">' + esc(s.title || "커핑 세션") + '</td><td>' + sessKind(s) + '</td><td>' + (CR.beans[s.id] || []).length + '종</td><td>' + Object.keys(c.people).length + '명</td><td>' + c.n + '건</td></tr>';
-      }).join("") + '</tbody></table>';
+      if (!list.length) { L.innerHTML = '<div class="crem">' + (q ? '검색 결과가 없어요.' : '평가 기록이 있는 센서리 훈련 커핑이 없어요.') + '</div>'; return; }
+      h = '<div class="crhead"><span>날짜</span><span>세션</span><span>종류</span><span>원두</span><span>참가</span><span>평가</span></div>' + list.map(function (s) {
+        var c = CR.cnt[s.id] || { n: 0, people: {} }, nb = (CR.beans[s.id] || []).length, np = Object.keys(c.people).length;
+        return '<button type="button" class="crrow' + (String(CR.selS) === String(s.id) && !CR.selFromBean ? ' on' : '') + '" data-sid="' + esc(s.id) + '">' +
+          '<span class="c1 nw">' + shortDate(s.scheduled_at) + '</span><span class="c2">' + esc(s.title || "커핑 세션") + '</span><span class="c3">' + sessKind(s) + '</span>' +
+          '<span class="c4 nw">' + nb + '종</span><span class="c5 nw">' + np + '명</span><span class="c6 nw">' + c.n + '건</span>' +
+          '<span class="c7">원두 ' + nb + '종 · 참가 ' + np + '명 · 평가 ' + c.n + '건</span></button>';
+      }).join("");
     } else {
       var rows = [];
       CR.sess.forEach(function (s) { (CR.beans[s.id] || []).forEach(function (b) { var pc = Object.keys(((CR.cnt[s.id] || {}).bean || {})[b.id] || {}).length; if (pc && (!q || nk(b.name).indexOf(q) >= 0)) rows.push({ s: s, b: b, n: pc }); }); });
       rows.sort(function (a, b) { return String(a.b.name).localeCompare(String(b.b.name), "ko") || (new Date(b.s.scheduled_at || 0) - new Date(a.s.scheduled_at || 0)); });
       if (!rows.length) { L.innerHTML = '<div class="crem">' + (q ? '검색 결과가 없어요.' : '평가 기록이 있는 원두가 없어요.') + '</div>'; return; }
-      h = '<table><thead><tr><th>원두</th><th>날짜 · 세션</th><th>평가</th></tr></thead><tbody>' + rows.map(function (x) {
+      h = '<div class="crhead"><span>원두</span><span>날짜 · 세션</span><span>평가</span></div>' + rows.map(function (x) {
         var on = String(CR.selS) === String(x.s.id) && String(CR.selB) === String(x.b.id) && CR.selFromBean;
-        return '<tr class="r' + (on ? ' on' : '') + '" data-sid="' + esc(x.s.id) + '" data-bid="' + esc(x.b.id) + '"><td class="w">' + esc(x.b.name) + '</td><td class="w"><span class="g">' + shortDate(x.s.scheduled_at) + ' · </span>' + esc(x.s.title || "커핑 세션") + '</td><td>' + x.n + '명</td></tr>';
-      }).join("") + '</tbody></table>';
+        return '<button type="button" class="crrow' + (on ? ' on' : '') + '" data-sid="' + esc(x.s.id) + '" data-bid="' + esc(x.b.id) + '"><span class="c1">' + esc(x.b.name) + '</span><span class="c2"><span class="g">' + shortDate(x.s.scheduled_at) + ' · </span>' + esc(x.s.title || "커핑 세션") + '</span><span class="c3 nw">' + x.n + '명</span></button>';
+      }).join("");
     }
     L.innerHTML = h;
   }
@@ -8453,29 +8459,17 @@ window.hideCalibration = async function() {
     var c0 = CR.cards[0];
     download(makeZip(files), "커핑평가카드_" + safeName(c0.title || "세션") + "_" + safeName(c0.bean) + ".zip");
   }
-  // 멤버 리스트 다시 그리기 · 메뉴 이동 · 성장 현황 열기 → 커핑 기록 닫기 (버튼은 다시 붙임)
-  function crHook() {
-    var ok = true;
-    if (typeof window.fetchMembers === "function" && !window.fetchMembers.__wcCr) {
-      var _fm = window.fetchMembers;
-      window.fetchMembers = function () { var r = _fm.apply(this, arguments); window.wcCupRecClose(); setTimeout(crInject, 0); return r; };
-      window.fetchMembers.__wcCr = true;
-    } else if (typeof window.fetchMembers !== "function") ok = false;
-    if (typeof window.switchMainTab === "function" && !window.switchMainTab.__wcCr) {
-      var _sm = window.switchMainTab;
-      window.switchMainTab = function () { window.wcCupRecClose(); return _sm.apply(this, arguments); };
-      window.switchMainTab.__wcCr = true;
-    }
-    if (typeof window.wcGrowthRankOpen === "function" && !window.wcGrowthRankOpen.__wcCr) {
-      var _go = window.wcGrowthRankOpen;
-      window.wcGrowthRankOpen = function () { window.wcCupRecClose(); return _go.apply(this, arguments); };
-      window.wcGrowthRankOpen.__wcCr = true;
-      var gb = _$("wcGrowthBtn"); if (gb) gb.onclick = window.wcGrowthRankOpen;
-    }
-    return ok;
-  }
+  // 성장 현황을 열 때마다 탭 줄을 붙이고 '멤버별 성장'으로 시작
+  document.addEventListener("click", function (e) { if (e.target && e.target.closest && e.target.closest("#wcGrowthBtn")) setTimeout(function () { crTab("g"); }, 0); }, true);
   (function crBoot() {
-    var n = 0, iv = setInterval(function () { var a = crHook(), b = crInject(); if ((a && b) || ++n > 80) clearInterval(iv); }, 500);
+    var n = 0, iv = setInterval(function () {
+      if (typeof window.wcGrowthRankOpen === "function" && !window.wcGrowthRankOpen.__wcCr) {
+        var _go = window.wcGrowthRankOpen;
+        window.wcGrowthRankOpen = function () { var r = _go.apply(this, arguments); setTimeout(function () { crTab("g"); }, 0); return r; };
+        window.wcGrowthRankOpen.__wcCr = true;
+        clearInterval(iv);
+      } else if (++n > 80) clearInterval(iv);
+    }, 500);
   })();
 
   /* ═══════════════ 2. 향미 노트 성장 ═══════════════ */
