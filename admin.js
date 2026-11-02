@@ -5998,6 +5998,7 @@ window.hideCalibration = async function() {
       ta.value = ""; if (visEl) window.memCoachTogglePub(visEl, false);
       window.memCoachResetEval(key);
       await window.memCoachRefresh(scope, phone, sessionId, beanId, refId);
+      try { if (window.wcGrowthChecksRefresh) window.wcGrowthChecksRefresh(); } catch (e2) {}   // 11-02: 성장 현황 '마지막 확인' 갱신
     } catch (e) {
       console.warn("[coach] 등록 실패", e);
       if (typeof showToast === "function") showToast(/unauthorized/i.test(e && e.message || "") ? "로그인 세션이 만료됐어요. 다시 로그인해 주세요." : "코멘트 등록에 실패했어요.");
@@ -6290,14 +6291,15 @@ window.hideCalibration = async function() {
   function roastRowHTML(row) {
     var right;
     var c = row.cup, gray = 'flex-shrink:0;font-size:12px;color:#b0b8c1;font-weight:600;';
-    if (!c) right = '<span style="' + gray + '">아직 커핑 안 함</span>';
-    else if (row.cupCard) {
+    /* 10-31: 상태 표기 — 미진행 / 예정 / 평가 미입력 / 점수(주황 버튼) */
+    if (!c) right = '<span style="' + gray + '">커핑 세션 미진행</span>';
+    else if (row.cupCard && c.cva != null) {
       right = '<button type="button" onclick="window.memRoastGoCup(\'' + rkAttr(c.sid) + '\')" style="flex-shrink:0;display:inline-flex;align-items:center;gap:6px;border:1px solid #ffd7b5;border-radius:8px;background:#fff;padding:5px 9px;font:inherit;font-size:12px;font-weight:700;color:#ea6f00;cursor:pointer;">' +
-        '커핑 ' + esc(rkMD(c.date)) + (c.cva != null ? ' · CVA <b style="font-size:14px;font-weight:800;">' + c.cva.toFixed(1) + '</b>' : '') +
+        '커핑 ' + esc(rkMD(c.date)) + ' · CVA <b style="font-size:14px;font-weight:800;">' + c.cva.toFixed(1) + '</b>' +
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>';
     }
-    else if (c.t && c.t > Date.now()) right = '<span style="' + gray + '">커핑 ' + esc(rkMD(c.date)) + ' 예정</span>';
-    else right = '<span style="' + gray + '">커핑 ' + esc(rkMD(c.date)) + ' · 기록 없음</span>';
+    else if (c.t && c.t > Date.now()) right = '<span style="' + gray + '">커핑 세션 예정 · ' + esc(rkMD(c.date)) + '</span>';
+    else right = '<span style="' + gray + '">커핑 ' + esc(rkMD(c.date)) + ' · 평가 미입력</span>';
     return '<div data-roast-row="1" data-roast-sess="' + rkAttr(c ? c.sid : "") + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid #eef0f3;border-radius:10px;padding:11px 12px;margin-bottom:6px;transition:border-color .3s,box-shadow .3s;">' +
       '<div style="min-width:0;flex:1 1 220px;"><div style="font-size:13px;font-weight:700;color:#191f28;word-break:keep-all;">' + esc(row.name) +
         (row.vendor ? ' <span style="font-weight:500;color:#8b95a1;">· ' + esc(row.vendor) + '</span>' : '') + '</div>' +
@@ -6737,6 +6739,9 @@ window.hideCalibration = async function() {
   var DOMAINS = ["센서리", "로스팅", "추출"];
   var MIN_PTS = 3;               // 역량별 최소 평가 포인트
   var _people = [], _batchFilter = "all", _skillFilter = "all", _batchList = [];
+  /* 11-02: 방문·확인 — 노션 명단 대신. 정렬(성장순/확인한 지 오래된 순) · 방문율 필터 · 확인 2주 경과 · '확인 완료' 기록(SQL 27) */
+  var _sortMode = "g", _rateFilter = "all", _staleOnly = false, STALE_DAYS = 14;
+  var _act = null, _actBusy = false, _chk = {}, _chkLoaded = false, _roster = [];
   function _$(id) { return document.getElementById(id); }
   function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
   function digits(s) { return String(s == null ? "" : s).replace(/[^0-9]/g, ""); }
@@ -6942,7 +6947,7 @@ window.hideCalibration = async function() {
           : '아직 교육 매니저 코멘트가 없어요.') + '</div>';
     return '<div class="wcgr-dom">' + head + '<div class="wcgr-cmts">' + comments + '</div></div>';
   }
-  function memberCard(m, rank) {
+  function memberCard(m, rank, noRank) {
     var doms = m.doms || {};
     var bySkill = _skillFilter !== "all";
     var hv = bySkill ? (doms[_skillFilter] ? doms[_skillFilter].improve : null) : m.score;
@@ -6951,7 +6956,7 @@ window.hideCalibration = async function() {
     var scoreTxt = hv == null ? "—" : signed(hv);
     var batchTag = m.batch ? '<span style="font-size:12px;font-weight:600;color:#8b95a1;margin-right:6px;">' + esc(batchLabel(m.batch)) + '</span>' : '';
     var rankCol = rank === 1 ? "#ff7900" : (rank <= 3 ? "#191f28" : "#c4ccd4");
-    var rankHtml = m.enough
+    var rankHtml = (m.enough && !noRank)
       ? '<span style="width:20px;flex-shrink:0;text-align:center;font-size:15px;font-weight:800;color:' + rankCol + ';">' + rank + '</span>'
       : '<span style="width:20px;flex-shrink:0;"></span>';
     var deltaLine = DOMAINS.map(function (dom) { return domDelta(dom, doms[dom]); }).join('<span style="color:#cbd2d9;margin:0 7px;">·</span>');
@@ -6963,6 +6968,7 @@ window.hideCalibration = async function() {
         '<div style="min-width:0;flex:1;">' +
           '<div style="font-size:15.5px;font-weight:800;color:#191f28;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + batchTag + esc(m.name) + '</div>' +
           '<div style="font-size:13px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + deltaLine + '</div>' +
+          '<div class="wcgr-act" data-actph="' + esc(m.phone) + '">' + actLineHTML(m.phone) + '</div>' +
         '</div>' +
         '<div style="text-align:right;flex-shrink:0;">' +
           '<div style="font-size:11.5px;color:#8b95a1;font-weight:700;">' + headLabel + '</div>' +
@@ -6971,6 +6977,7 @@ window.hideCalibration = async function() {
         '<svg class="wcgr-chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c4ccd4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;transition:transform .18s;"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
       '</div>' +
       '<div class="wcgr-detail" style="display:none;">' +
+        '<div class="wcgr-chk" data-chkph="' + esc(m.phone) + '">' + chkRowHTML(m.phone) + '</div>' +
         '<div class="wcgr-grid">' +
           '<div class="wcgr-main">' +
             '<div class="wcgr-sec"><div class="wcgr-sec-t">역량 추이</div>' + detail +
@@ -6985,6 +6992,19 @@ window.hideCalibration = async function() {
   function sortVal(m) { return _skillFilter === "all" ? (m.score == null ? -1e9 : m.score) : (m.doms[_skillFilter] ? m.doms[_skillFilter].improve : -1e9); }
   function levelVal(m) { return _skillFilter === "all" ? (m.level || 0) : (m.doms[_skillFilter] ? m.doms[_skillFilter].level : 0); }
   function batchLabel(b) { return /^\d+$/.test(b) ? b + "기" : b; }
+  function selStyle() { return 'height:34px;border:1px solid #e5e8eb;border-radius:9px;font-size:12.5px;font-weight:700;padding:0 30px 0 12px;background:#fff url(data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2212%22%20height=%2212%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%238b95a1%22%20stroke-width=%222.4%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpolyline%20points=%226%209%2012%2015%2018%209%22/%3E%3C/svg%3E) no-repeat right 10px center;background-size:12px;color:#191f28;font-family:inherit;cursor:pointer;-webkit-appearance:none;appearance:none;'; }
+  // 11-02: 둘째 줄 — 방문율 필터 · 확인 2주 경과 (인원수는 기수 필터까지 적용한 기준)
+  function filterRow2HTML(base, staleN) {
+    var LBL = [["all", "전체"], ["ok", "60% 이상"], ["mid", "30~59%"], ["low", "30% 미만"]];
+    var chips = LBL.map(function (o) {
+      var n = base.filter(function (m) { return o[0] === "all" || rateBand(m.phone) === o[0]; }).length;
+      return '<button type="button" class="wcgr-chip' + (_rateFilter === o[0] ? ' on' : '') + '" data-rate="' + o[0] + '">' + o[1] + '<span class="n">' + n + '</span></button>';
+    }).join("");
+    return '<div class="wcgr-row2">' +
+      '<div class="wcgr-grp"><span class="wcgr-fl">방문율</span><div class="wcgr-chips">' + chips + '</div></div>' +
+      '<button type="button" class="wcgr-stale' + (_staleOnly ? ' on' : '') + '" data-stale="1"><span class="bx"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>확인 2주 경과 (' + staleN + ')</button>' +
+    '</div>';
+  }
   function filterBarHTML() {
     var opts = '<option value="all">전체 기수</option>' + _batchList.map(function (b) {
       return '<option value="' + esc(b) + '"' + (_batchFilter === b ? ' selected' : '') + '>' + esc(batchLabel(b)) + '</option>';
@@ -6993,21 +7013,35 @@ window.hideCalibration = async function() {
       var on = _skillFilter === o[0];
       return '<button type="button" data-skill="' + o[0] + '" style="border:none;background:' + (on ? "#fff" : "transparent") + ';color:' + (on ? "#191f28" : "#8b95a1") + ';padding:6px 12px;font-size:12.5px;font-weight:800;border-radius:7px;cursor:pointer;' + (on ? "box-shadow:0 1px 3px rgba(0,0,0,.08);" : "") + '">' + o[1] + '</button>';
     }).join("");
-    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;">' +
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:0;">' +
       '<select id="wcGrowthBatch" style="height:34px;border:1px solid #e5e8eb;border-radius:9px;font-size:12.5px;font-weight:700;padding:0 30px 0 12px;background:#fff url(data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2212%22%20height=%2212%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%238b95a1%22%20stroke-width=%222.4%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpolyline%20points=%226%209%2012%2015%2018%209%22/%3E%3C/svg%3E) no-repeat right 10px center;background-size:12px;color:#191f28;font-family:inherit;cursor:pointer;appearance:none;-webkit-appearance:none;-moz-appearance:none;">' + opts + '</select>' +
       '<div style="display:inline-flex;background:#f2f4f6;border-radius:10px;padding:3px;">' + seg + '</div>' +
+      '<select id="wcGrowthSort" style="' + selStyle() + 'margin-left:auto;"><option value="g"' + (_sortMode === "g" ? " selected" : "") + '>성장순</option><option value="c"' + (_sortMode === "c" ? " selected" : "") + '>확인한 지 오래된 순</option></select>' +
     '</div>';
   }
   // 필터·정렬 적용 후 전체 본문(필터바+안내+리스트) 반환
   window.wcGrowthRankRender = function () {
-    var pool = _people.filter(function (m) { return _batchFilter === "all" || String(m.batch || "") === _batchFilter; });
+    // 11-02: 확인 순 = 활동 중 멤버 전체(평가 횟수 무관) · 성장순 = 지금 그대로
+    var base = (_sortMode === "c" ? checkPeople() : _people).filter(function (m) { return _batchFilter === "all" || String(m.batch || "") === _batchFilter; });
+    var pool = base.filter(function (m) { return _rateFilter === "all" || rateBand(m.phone) === _rateFilter; });
+    var staleN = pool.filter(function (m) { return isStale(m.phone); }).length;
+    if (_staleOnly) pool = pool.filter(function (m) { return isStale(m.phone); });
+    if (_sortMode === "c") {
+      pool = pool.slice().sort(function (a, b) { return chkDays(b.phone) - chkDays(a.phone); });
+      var hc = filterBarHTML() + filterRow2HTML(base, staleN) +
+        '<div style="font-size:14px;font-weight:700;color:#4e5968;margin-bottom:5px;line-height:1.5;"><b style="color:#ff7900;">확인한 지</b> 오래된 순으로 정렬했어요.</div>' +
+        '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">활동 중인 멤버 전체 · 코멘트를 남기면 확인도 같이 기록돼요</div>';
+      if (!pool.length) hc += '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">조건에 맞는 멤버가 없어요.</div>';
+      else hc += pool.map(function (m) { return memberCard(m, 0, true); }).join("");
+      return hc;
+    }
     var qual = [], few = [];
     pool.forEach(function (m) { (skillQualifies(m) ? qual : few).push(m); });
     qual.sort(function (a, b) { return (sortVal(b) - sortVal(a)) || (levelVal(b) - levelVal(a)); });
     var intro = _skillFilter === "all"
       ? '개선폭이 큰 순으로 정렬했어요.'
       : ('<b style="color:#ff7900;">' + _skillFilter + '</b> 개선폭 순으로 정렬했어요.');
-    var h = filterBarHTML() +
+    var h = filterBarHTML() + filterRow2HTML(base, staleN) +
       '<div style="font-size:14px;font-weight:700;color:#4e5968;margin-bottom:5px;line-height:1.5;">' + intro + '</div>' +
       '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">역량별 3회 이상 평가된 멤버만 · 센서리는 커핑 편차(정확도), 로스팅·추출은 교육 매니저 점수</div>';
     if (!qual.length) h += '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">여기 조건에 맞는 멤버가 아직 없어요. 세션마다 역량·점수를 남기면 3회부터 잡혀요.</div>';
@@ -7038,6 +7072,159 @@ window.hideCalibration = async function() {
     if (chev) chev.style.transform = open ? "rotate(180deg)" : "";
   };
   function repaint() { var body = _$("wcGrowthBody"); if (body) body.innerHTML = window.wcGrowthRankRender(); }
+  /* ═══ 11-02: 방문·확인 ═══ */
+  function dayDiff(s) { var a = ymd(s); if (!a) return null; return Math.round((new Date(todayStr()) - new Date(a)) / 864e5); }
+  function rateBand(ph) { var a = _act && _act[ph]; if (!a || a.rate == null) return ""; return a.rate >= 60 ? "ok" : (a.rate >= 30 ? "mid" : "low"); }
+  function chkDays(ph) { var c = _chk[ph]; if (!c) return 1e9; var d = dayDiff(c.at); return d == null ? 1e9 : d; }
+  function isStale(ph) { return chkDays(ph) > STALE_DAYS; }
+  function agoTxt(d) { return d <= 0 ? "오늘" : d + "일 전"; }
+  // 멤버 상세 '자발적 방문율'과 같은 계산 (취소·오늘 이후 제외 · 주 단위)
+  function visitStats(ress, trns) {
+    var resDates = ress.map(function (r) { return ymd(r.res_date); }).filter(Boolean);
+    var trainDates = trns.filter(function (t) { var c = trnCat(t); return c !== "기본 수업" && c !== "세미나" && c !== "대회"; }).map(function (t) { return trnDateOf(t); }).filter(Boolean);
+    function wk(s) { var t = new Date(s); if (isNaN(t)) return null; t.setHours(0, 0, 0, 0); return Math.floor(t.getTime() / 604800000); }
+    var times = resDates.concat(trainDates).map(function (x) { return new Date(x).getTime(); }).filter(function (x) { return !isNaN(x); });
+    var last = resDates.length ? resDates.slice().sort().slice(-1)[0] : "";
+    if (!times.length) return { rate: null, last: last };
+    var weeks = Math.max(1, wk(new Date()) - wk(new Date(Math.min.apply(null, times))) + 1);
+    var rw = {}; resDates.forEach(function (x) { var b = wk(x); if (b != null) rw[b] = 1; });
+    return { rate: Math.round(Object.keys(rw).length / weeks * 100), last: last };
+  }
+  async function fetchAllRows(table, cols) {
+    var out = [], step = 1000;
+    for (var i = 0; i < 60; i++) {
+      var r = await supabaseClient.from(table).select(cols).order("id", { ascending: true }).range(i * step, i * step + step - 1);
+      if (r.error) throw r.error;
+      var d = r.data || []; out = out.concat(d);
+      if (d.length < step) break;
+    }
+    return out;
+  }
+  async function loadAct() {
+    if (_act || _actBusy) return; _actBusy = true;
+    try {
+      var rs = await Promise.all([fetchAllRows("reservations", "id,phone,status,res_date"), fetchAllRows("trainings", "id,phone,status,content,created_at")]);
+      var today = todayStr(), byP = {};
+      var ok = function (r) { return String(r.status || "").indexOf("취소") < 0; };
+      rs[0].forEach(function (r) { var p = digits(r.phone), d = ymd(r.res_date); if (!p || !ok(r) || (d && d > today)) return; (byP[p] = byP[p] || { r: [], t: [] }).r.push(r); });
+      rs[1].forEach(function (t) { var p = digits(t.phone), d = trnDateOf(t); if (!p || !ok(t) || (d && d > today)) return; (byP[p] = byP[p] || { r: [], t: [] }).t.push(t); });
+      var act = {};
+      Object.keys(byP).forEach(function (p) { act[p] = visitStats(byP[p].r, byP[p].t); });
+      _act = act;
+    } catch (e) { console.warn("[growth] 방문 기록 조회 실패", e); _act = {}; }
+    _actBusy = false;
+  }
+  async function loadChecks() {
+    try {
+      var r = await supabaseClient.rpc("member_last_checks");
+      if (r.error) throw r.error;
+      _chk = (r.data && typeof r.data === "object") ? r.data : {};
+    } catch (e) {
+      // SQL 27 실행 전: 코칭 코멘트만으로 마지막 확인 계산
+      console.warn("[growth] 확인 기록 RPC 없음 — 코멘트로 대체", e && e.message);
+      try {
+        var rows = await fetchAllRows("coach_notes", "id,member_phone,created_at,author_name,author_email"), m = {};
+        rows.forEach(function (n) { var p = digits(n.member_phone); if (!p) return; if (!m[p] || new Date(n.created_at) > new Date(m[p].at)) m[p] = { at: n.created_at, by: n.author_name || n.author_email || "", id: null, mine: false }; });
+        _chk = m;
+      } catch (e2) { _chk = {}; }
+    }
+    _chkLoaded = true;
+  }
+  function loadRoster() {
+    var src = window.globalMembers || [], today = new Date(); today.setHours(0, 0, 0, 0);
+    var by = {};
+    src.forEach(function (m) {
+      var p = digits(m.phone); if (!p) return;
+      if (/^(운영팀|앰버서더)$/.test(String(m.batch || "").replace(/[\[\]]/g, "").trim())) return;
+      var expired = true; if (m.end_date && String(m.end_date).length >= 10) { var e = new Date(String(m.end_date).slice(0, 10)); e.setHours(0, 0, 0, 0); if (e >= today) expired = false; }
+      var st = m.status || "활동 중";
+      if (st === "패널티 정지" || st === "활동 일시정지" || expired) return;
+      if (["활동 중", "연장 활동 중", "단일권 이용"].indexOf(st) < 0) return;
+      var cur = by[p];
+      var bn = parseInt(String(m.batch || "").replace(/[^0-9]/g, ""), 10) || 0;
+      if (!cur || bn > cur._bn) by[p] = { phone: p, name: m.name || p, batch: m.batch || "", _bn: bn };
+    });
+    _roster = Object.keys(by).map(function (k) { return by[k]; });
+  }
+  function checkPeople() {
+    var g = {}; _people.forEach(function (m) { g[m.phone] = m; });
+    return _roster.map(function (r) {
+      var m = g[r.phone];
+      return m ? m : { phone: r.phone, name: r.name, batch: r.batch, doms: {}, entries: {}, score: null, contrib: 0, consistency: 0, enough: false };
+    });
+  }
+  function actLineHTML(ph) {
+    var S = '<span class="sep">·</span>', out = [];
+    if (_act === null) out.push('방문 기록 불러오는 중…');
+    else {
+      var a = _act[ph];
+      if (!a || a.rate == null) out.push('방문 기록 없음');
+      else {
+        out.push('방문율 <b class="' + rateBand(ph) + '">' + a.rate + '%</b>');
+        var vd = a.last ? dayDiff(a.last) : null;
+        out.push(vd == null ? '마지막 방문 없음' : '마지막 방문 <b class="' + (vd > STALE_DAYS ? "low" : "") + '">' + agoTxt(vd) + '</b>');
+      }
+    }
+    if (_chkLoaded) {
+      var c = _chk[ph], d = c ? dayDiff(c.at) : null;
+      if (!c || d == null) out.push('<b class="low">확인 기록 없음</b>');
+      else if (d <= 0) out.push('<b class="ok">오늘 확인</b> · ' + esc(c.by || ""));
+      else out.push('마지막 확인 <b class="' + (d > STALE_DAYS ? "low" : "") + '">' + d + '일 전</b> · ' + esc(c.by || ""));
+    }
+    return out.map(function (x) { return '<span class="it">' + x + '</span>'; }).join(S);
+  }
+  function chkRowHTML(ph) {
+    var c = _chk[ph], d = c ? dayDiff(c.at) : null;
+    if (c && d != null && d <= 0) {
+      return '<span class="done">오늘 확인 · ' + esc(c.by || "") + '</span>' +
+        (c.mine && c.id != null ? '<button type="button" class="undo" data-chkundo="' + esc(ph) + '">취소</button>' : '');
+    }
+    return '<button type="button" class="cbtn" data-chkadd="' + esc(ph) + '">확인 완료</button>';
+  }
+  // 펼친 카드를 닫지 않고 그 줄만 다시 그림
+  function paintChk(ph) {
+    var body = _$("wcGrowthBody"); if (!body) return;
+    Array.prototype.forEach.call(body.querySelectorAll(".wcgr-act"), function (el) { if (!ph || el.getAttribute("data-actph") === ph) el.innerHTML = actLineHTML(el.getAttribute("data-actph")); });
+    Array.prototype.forEach.call(body.querySelectorAll(".wcgr-chk"), function (el) { if (!ph || el.getAttribute("data-chkph") === ph) el.innerHTML = chkRowHTML(el.getAttribute("data-chkph")); });
+  }
+  function toast(t) { if (typeof showToast === "function") showToast(t); }
+  async function chkAdd(btn) {
+    var ph = btn.getAttribute("data-chkadd"); if (!ph || btn.disabled) return; btn.disabled = true;
+    try {
+      var r = await supabaseClient.rpc("member_check_add", { p_phone: ph });
+      if (r.error) throw r.error;
+      _chk[ph] = r.data; paintChk(ph);
+    } catch (e) {
+      btn.disabled = false;
+      var m = String(e && e.message || "");
+      toast(/member_check_add|PGRST202|does not exist|not find/i.test(m) ? "확인 기록 서버 준비 전이에요. (SQL 27 실행 필요)" : (/not_admin/.test(m) ? "관리자 계정으로 로그인해 주세요." : "확인 기록에 실패했어요."));
+    }
+  }
+  async function chkUndo(btn) {
+    var ph = btn.getAttribute("data-chkundo"), c = _chk[ph]; if (!ph || !c || c.id == null || btn.disabled) return; btn.disabled = true;
+    try {
+      var r = await supabaseClient.rpc("member_check_undo", { p_id: Number(c.id) });
+      if (r.error) throw r.error;
+      await loadChecks(); paintChk(ph);
+    } catch (e) { btn.disabled = false; toast("취소하지 못했어요."); }
+  }
+  // 코멘트를 남기면 확인도 같이 갱신 (멤버 상세에서 코멘트 등록 뒤 호출)
+  window.wcGrowthChecksRefresh = async function () { if (!_$("wcGrowthBody")) return; await loadChecks(); paintChk(); };
+  // 펼친 카드 유지하며 다시 그림
+  function repaintKeep() {
+    var body = _$("wcGrowthBody"); if (!body) return;
+    var openPh = Array.prototype.map.call(body.querySelectorAll(".wcgr-card"), function (c) {
+      var d = c.querySelector(".wcgr-detail"); return d && d.style.display !== "none" ? c.getAttribute("data-phone") : null;
+    }).filter(Boolean);
+    repaint();
+    openPh.forEach(function (ph) {
+      var card = body.querySelector('.wcgr-card[data-phone="' + String(ph).replace(/"/g, "") + '"]'); if (!card) return;
+      var det = card.querySelector(".wcgr-detail"); if (!det) return;
+      det.style.display = "block";
+      var chev = card.querySelector(".wcgr-chev"); if (chev) chev.style.transform = "rotate(180deg)";
+      loadHist(card);
+    });
+  }
   // 10-28: 코멘트 공개·수정·삭제 뒤 다시 계산 — 보던 필터와 펼친 카드 유지
   window.wcGrowthRankReload = async function () {
     var body = _$("wcGrowthBody"); if (!body) return;
@@ -7047,6 +7234,7 @@ window.hideCalibration = async function() {
     try {
       var d = await loadData();
       _people = computeGrowth(d.coachPts, d.sens, d.names, d.batches);
+      await loadChecks();
       repaint();
       openPh.forEach(function (ph) {
         var card = body.querySelector('.wcgr-card[data-phone="' + String(ph).replace(/"/g, "") + '"]'); if (!card) return;
@@ -7355,8 +7543,34 @@ window.hideCalibration = async function() {
     window.openHistoryModal((m && m.phone) || key, card.getAttribute("data-name") || "");
   }
   /* ═══ 인페이지 뷰 — 멤버 페이지(#page-members) 안에서 리스트 ↔ 성장 현황 전환 ═══ */
+  function chkStyle() {
+    if (_$("wcGrowthChkStyle")) return;
+    var st = document.createElement("style"); st.id = "wcGrowthChkStyle";
+    st.textContent =
+      ".wcgr-row2{display:flex;align-items:center;gap:28px;flex-wrap:wrap;margin:16px 0 20px;}" +
+      ".wcgr-grp{display:flex;align-items:center;gap:12px;}" +
+      ".wcgr-fl{font-size:13px;font-weight:800;color:#191f28;}" +
+      ".wcgr-chips{display:flex;gap:4px;}" +
+      ".wcgr-chip{white-space:nowrap;height:32px;padding:0 12px;border:1px solid transparent;border-radius:8px;background:none;font-family:inherit;font-size:13px;font-weight:500;color:#8b95a1;cursor:pointer;}" +
+      ".wcgr-chip:hover{color:#4e5968;}" +
+      ".wcgr-chip.on{color:#ea6f00;border-color:#ffd7b5;font-weight:700;}" +
+      ".wcgr-chip .n{margin-left:4px;color:#b0b8c1;}.wcgr-chip.on .n{color:#ff9a3d;}" +
+      ".wcgr-stale{display:inline-flex;align-items:center;gap:8px;border:none;background:none;padding:0;font-family:inherit;font-size:13px;font-weight:500;color:#4e5968;cursor:pointer;}" +
+      ".wcgr-stale .bx{width:16px;height:16px;border:1.5px solid #c4ccd4;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;}" +
+      ".wcgr-stale.on{color:#ea6f00;}.wcgr-stale.on .bx{border-color:#ff7900;background:#ff7900;}" +
+      ".wcgr-act{font-size:12.5px;color:#8b95a1;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
+      ".wcgr-act b{font-weight:700;color:#4e5968;}.wcgr-act b.ok{color:#00b386;}.wcgr-act b.mid{color:#ea6f00;}.wcgr-act b.low{color:#e5484d;}" +
+      ".wcgr-act .sep{color:#d1d6db;margin:0 7px;}" +
+      ".wcgr-chk{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 4px 4px 37px;}" +
+      ".wcgr-chk .cbtn{height:34px;padding:0 14px;border:1px solid #ffd7b5;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}" +
+      ".wcgr-chk .cbtn:disabled{opacity:.5;cursor:default;}" +
+      ".wcgr-chk .done{font-size:13px;font-weight:700;color:#00b386;}" +
+      ".wcgr-chk .undo{border:none;background:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:#8b95a1;cursor:pointer;text-decoration:underline;}" +
+      "@media (max-width:720px){.wcgr-row2{gap:14px;}.wcgr-grp{flex-direction:column;align-items:flex-start;gap:6px;}.wcgr-chips{flex-wrap:wrap;}.wcgr-chip{padding:0 8px;}.wcgr-act{white-space:normal;}.wcgr-act .it{white-space:nowrap;}#wcGrowthSort{margin-left:0!important;}}";
+    document.head.appendChild(st);
+  }
   function ensureStyle() {
-    detailStyle();
+    detailStyle(); chkStyle();
     if (_$("wcGrowthStyle")) return;
     var st = document.createElement("style");
     st.id = "wcGrowthStyle";
@@ -7389,6 +7603,14 @@ window.hideCalibration = async function() {
     p.addEventListener("click", function (e) {
       var seg = e.target.closest && e.target.closest("[data-skill]");
       if (seg) { _skillFilter = seg.getAttribute("data-skill"); repaint(); return; }
+      var ca = e.target.closest && e.target.closest("[data-chkadd]");
+      if (ca) { chkAdd(ca); return; }
+      var cu = e.target.closest && e.target.closest("[data-chkundo]");
+      if (cu) { chkUndo(cu); return; }
+      var rt = e.target.closest && e.target.closest("[data-rate]");
+      if (rt) { _rateFilter = rt.getAttribute("data-rate"); repaint(); return; }
+      var sto = e.target.closest && e.target.closest("[data-stale]");
+      if (sto) { _staleOnly = !_staleOnly; repaint(); return; }
       var more = e.target.closest && e.target.closest("[data-histmore]");
       if (more) { histMore(more); return; }
       var hop = e.target.closest && e.target.closest("[data-histopen]");
@@ -7404,6 +7626,7 @@ window.hideCalibration = async function() {
     // 기수 필터
     p.addEventListener("change", function (e) {
       if (e.target && e.target.id === "wcGrowthBatch") { _batchFilter = e.target.value; repaint(); }
+      if (e.target && e.target.id === "wcGrowthSort") { _sortMode = e.target.value; repaint(); }
     });
     return p;
   }
@@ -7424,7 +7647,9 @@ window.hideCalibration = async function() {
     try {
       var d = await loadData();
       _people = computeGrowth(d.coachPts, d.sens, d.names, d.batches);
-      var bl = {}; _people.forEach(function (m) { if (m.batch) bl[m.batch] = 1; });
+      loadRoster();
+      await loadChecks();
+      var bl = {}; _people.concat(_roster).forEach(function (m) { if (m.batch) bl[m.batch] = 1; });
       _batchList = Object.keys(bl).sort(function (a, b) {
         var na = parseInt(String(a).replace(/[^0-9]/g, ""), 10), nb = parseInt(String(b).replace(/[^0-9]/g, ""), 10);
         if (!isNaN(na) && !isNaN(nb)) return nb - na;      // 최신 기수 먼저
@@ -7432,6 +7657,7 @@ window.hideCalibration = async function() {
       });
       if (_batchFilter !== "all" && _batchList.indexOf(_batchFilter) < 0) _batchFilter = "all";
       repaint();
+      _act = null; loadAct().then(repaintKeep);   // 방문 기록은 뒤에서 받아 다시 그림
     } catch (e) {
       console.error("[growth] 열기 실패", e);
       if (body) body.innerHTML = '<div style="padding:30px 0;text-align:center;color:#e5484d;font-size:13px;">불러오지 못했어요. 새로고침 후 다시 시도해 주세요.</div>';
