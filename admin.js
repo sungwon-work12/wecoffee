@@ -5719,6 +5719,7 @@ window.hideCalibration = async function() {
     }
     // ── 역량 성장(센서리·로스팅·추출) — 커핑12 성장 랭킹과 동일 계산(wcGrowthCompute) 재사용. 비동기 주입. ──
     h += sectionTitle("역량 성장", "20px", "센서리 · 로스팅 · 추출");
+    h += '<div id="wcMemNotesSlot"></div>';   // 11-02: 향미 노트 성장 (역량 성장 아래로 옮겨 채움)
     h += '<div id="wcMemGrowth" style="margin-bottom:20px;"><div style="padding:14px;text-align:center;color:#8b95a1;font-size:13px;background:#f9fafb;border-radius:10px;">성장 데이터 불러오는 중…</div></div>';
     // ── 10-31: 로스팅 기록 (커핑 이력 위) ──
     if (roastRows.length) {
@@ -5758,6 +5759,8 @@ window.hideCalibration = async function() {
     else { ress.sort(function (a, b) { return new Date(b.res_date || 0) - new Date(a.res_date || 0); }); h += moreList("memResMore", ress, 5, function (r) { var t = [r.center, String(r.space_equip || "").replace(/로스팅룸/g, "로스팅존")].filter(Boolean).join(" · ") || "센터 예약"; if (r.res_time) t += " · " + r.res_time; return cmtItem(t, dstr(r.res_date), "reservation", phone, name, { refId: r.id, sub: resSub(r) }, cnJoin(cnFullD(r.res_date), cnCenter(r.center), cnEquip(r.space_equip))); }); }
     h += '</div>';
     host.innerHTML = h;
+    // 11-02: 향미 노트 성장 — 역량 성장(#wcMemGrowth) 바로 아래
+    try { var __ns = document.getElementById("wcMemNotesSlot"), __g = document.getElementById("wcMemGrowth"); if (__ns && __g && __g.parentNode) { __g.parentNode.insertBefore(__ns, __g.nextSibling); __ns.id = "wcMemNotes"; if (window.wcNoteGrowthFill) window.wcNoteGrowthFill(__ns, phone); } } catch (e) { console.warn("[향미 노트] 섹션 주입 실패", e); }
     // ── [B] 마스터-디테일 셸 + 좌측 레일 + 우측 패널(설문 최상단) ──
     try {
       var __app = await __wcFindApp(phone);
@@ -6982,6 +6985,7 @@ window.hideCalibration = async function() {
           '<div class="wcgr-main">' +
             '<div class="wcgr-sec"><div class="wcgr-sec-t">역량 추이</div>' + detail +
               '<div style="margin-top:12px;font-size:11.5px;color:#8b95a1;line-height:1.6;">개선폭 = 최근 − 초기 구간 평균 · 3회↑만 반영 · <span style="color:#3182f6;font-weight:700;">객관</span> 커핑 편차 · <span style="color:#ff7900;font-weight:700;">매니저</span> 평가 점수</div></div>' +
+            '<div class="wcgr-notes" data-notesph="' + esc(m.phone) + '"></div>' +   // 11-02: 향미 노트 성장
             '<div class="wcgr-hist-main"></div>' +
           '</div>' +
           '<div class="wcgr-side"></div>' +
@@ -7526,6 +7530,8 @@ window.hideCalibration = async function() {
       if (!document.body.contains(side) || !det || det.style.display === "none") return;
       mainBox.innerHTML = mainHTML(d);
       side.innerHTML = sideHTML(d, key);
+      var nb = card.querySelector(".wcgr-notes");
+      if (nb && window.wcNoteGrowthFill) window.wcNoteGrowthFill(nb, key);   // 11-02: 향미 노트 성장
     } catch (e) {
       console.warn("[growth] 멤버 내역 렌더 실패", e);
       if (document.body.contains(side)) side.innerHTML = '<div class="wcgr-empty">멤버 정보를 불러오지 못했어요.</div>';
@@ -7875,3 +7881,481 @@ window.hideCalibration = async function() {
 (function(){ if (document.getElementById("wcCnLineCss")) return; var st=document.createElement("style"); st.id="wcCnLineCss";
   st.textContent="@media screen and (max-width:768px){.cnItem.cnLine{flex-wrap:wrap;}.cnItem.cnLine .cnActs{width:100%;justify-content:flex-end;margin-top:2px;}}";
   (document.head||document.documentElement).appendChild(st); })();
+
+/* ══════════════════════════════════════════════════════
+   WeCoffee Admin · 커핑 13 — 커핑 평가 카드 · 향미 노트 성장 (11-02)
+   · 세션 상세 '참가자 평가 조회' 안 [평가 카드 만들기] → 원두 고르기 → 그 원두를 평가한 멤버 수만큼 카드
+     (가로 1080 PNG · 이름 가운데 가림 · 한 장씩 저장 또는 묶음 zip 저장)
+   · window.wcNoteGrowthFill(el, phone): 멤버 상세 · 성장 현황 펼침의 '향미 노트 성장' 섹션
+   의존: supabaseClient · 커핑 1(gCuppingBeans) · 커핑 7(참가자 평가 조회 영역)
+   ═══════════════════════════════════════════════════════ */
+(function () {
+  "use strict";
+  var LABS = ["프래그런스", "아로마", "향미", "뒷맛", "산미", "단맛", "마우스필"];
+  var KEYS = ["int_fragrance", "int_aroma", "int_flavor", "int_aftertaste", "int_acidity", "int_sweetness", "int_mouthfeel"];
+  var FONT = "Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+  var DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  var QN = [["aroma", "아로마"], ["flavor", "향미"], ["acidity", "산미"], ["sweetness", "단맛"], ["mouthfeel", "마우스필"], ["overall", "종합"]];
+  function _$(id) { return document.getElementById(id); }
+  function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function num(v) { return (v == null || v === "") ? null : (isNaN(Number(v)) ? null : Number(v)); }
+  function digits(s) { return String(s == null ? "" : s).replace(/\D/g, ""); }
+  function nk(s) { return String(s == null ? "" : s).replace(/\s+/g, "").toLowerCase(); }
+  function uniqNotes(arr) { var seen = {}, out = []; (arr || []).forEach(function (v) { var t = String(v == null ? "" : v).trim(), k = nk(t); if (t && !seen[k]) { seen[k] = 1; out.push(t); } }); return out; }
+  function mask(n) { n = String(n || "").trim(); if (n.length <= 1) return n; if (n.length === 2) return n[0] + "*"; return n[0] + new Array(n.length - 1).join("*") + n[n.length - 1]; }
+  function cleanBatch(b) { return String(b || "").replace(/[\[\]]/g, "").trim(); }
+  function dateTxt(s) { var d = new Date(s); if (!s || isNaN(d)) return ""; return d.getFullYear() + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + DOW[d.getDay()] + ")"; }
+  function mdTxt(s) { var d = new Date(s); if (!s || isNaN(d)) return ""; return (d.getMonth() + 1) + "/" + d.getDate(); }
+  function cvaTxt(v) { if (v == null) return "—"; return (Math.round(v * 100) / 100).toFixed(2).replace(/0$/, ""); }
+  function f1(v) { return v == null ? "—" : Number(v).toFixed(1); }
+  function toast(t) { if (typeof showToast === "function") showToast(t); }
+
+  /* ═══════════════ 1. 커핑 평가 카드 ═══════════════ */
+  function beansOf(sid) { try { return (typeof gCuppingBeans !== "undefined" && gCuppingBeans[sid]) || []; } catch (e) { return []; } }
+  function curSid() { var el = _$("lineupSessionId"); return el ? el.value : null; }
+
+  async function loadCardData(sid, beanId) {
+    var sess = window._cuppingSession && String(window._cuppingSession.id) === String(sid) ? window._cuppingSession : null;
+    if (!sess) { var sr = await supabaseClient.from("cupping_sessions").select("*").eq("id", sid).maybeSingle(); sess = sr.data || { id: sid }; }
+    var bean = beansOf(sid).filter(function (b) { return String(b.id) === String(beanId); })[0];
+    if (!bean) { var br = await supabaseClient.from("cupping_beans").select("*").eq("id", beanId).maybeSingle(); bean = br.data || { id: beanId, name: "" }; }
+    var rr = await supabaseClient.from("cupping_records").select("*").eq("session_id", sid).eq("bean_id", beanId);
+    if (rr.error) throw rr.error;
+    var refR = await supabaseClient.from("cupping_references").select("*").eq("bean_id", beanId).maybeSingle();
+    var pr = await supabaseClient.from("cupping_participants").select("*, members(name, batch, phone)").eq("session_id", sid);
+    var parts = {}; (pr.data || []).forEach(function (p) { parts[p.id] = p; });
+    // 이 세션 전에 쓴 노트 (멤버별) → '처음 짚은 노트'
+    var prev = {}, mids = [];
+    Object.keys(parts).forEach(function (k) { var m = parts[k].member_id; if (m && mids.indexOf(m) < 0) mids.push(m); });
+    if (mids.length && sess.scheduled_at) {
+      try {
+        var op = await supabaseClient.from("cupping_participants").select("id,session_id,member_id").in("member_id", mids);
+        var others = (op.data || []).filter(function (p) { return String(p.session_id) !== String(sid); });
+        var sids = []; others.forEach(function (p) { if (sids.indexOf(p.session_id) < 0) sids.push(p.session_id); });
+        if (sids.length) {
+          var ss = await supabaseClient.from("cupping_sessions").select("id,scheduled_at").in("id", sids);
+          var before = {}, cut = new Date(sess.scheduled_at).getTime();
+          (ss.data || []).forEach(function (s) { if (s.scheduled_at && new Date(s.scheduled_at).getTime() < cut) before[s.id] = 1; });
+          var pids = others.filter(function (p) { return before[p.session_id]; });
+          var pidMem = {}; pids.forEach(function (p) { pidMem[p.id] = p.member_id; });
+          if (pids.length) {
+            var orr = await supabaseClient.from("cupping_records").select("participant_id,notes_fragrance,notes_aroma,notes_tasting,notes_custom").in("participant_id", pids.map(function (p) { return p.id; }));
+            (orr.data || []).forEach(function (r) {
+              var m = pidMem[r.participant_id]; if (!m) return;
+              var set = prev[m] = prev[m] || {};
+              [].concat(r.notes_fragrance || [], r.notes_aroma || [], r.notes_tasting || [], r.notes_custom || []).forEach(function (n) { var k = nk(n); if (k) set[k] = 1; });
+            });
+          }
+        }
+      } catch (e) { console.warn("[평가 카드] 이전 노트 조회 실패", e); }
+    }
+    return { sess: sess, bean: bean, recs: rr.data || [], ref: refR.data || null, parts: parts, prev: prev };
+  }
+
+  function buildCards(d) {
+    var ref = d.ref, refHasInt = !!(ref && KEYS.some(function (k) { return num(ref[k]) != null; }));
+    var refSet = {}; ((ref && ref.ref_notes) || []).forEach(function (n) { var k = nk(n); if (k) refSet[k] = 1; });
+    var kind = refHasInt ? "센서리 훈련 · 캘리브레이션" : (d.sess.created_via === "member" ? "멤버 커핑 세션" : "센서리 훈련");
+    var b = d.bean || {};
+    var info = [["지역", b.origin], ["농장", b.farm], ["가공", b.process], ["품종", b.variety], ["고도", b.altitude], ["로스팅", b.roast_level]]
+      .filter(function (x) { return String(x[1] == null ? "" : x[1]).trim(); }).map(function (x) { return [x[0], String(x[1]).trim()]; });
+    var cards = [];
+    d.recs.forEach(function (r) {
+      if (r.form_type === "basic") return;
+      if (!(KEYS.some(function (k) { return num(r[k]) != null; }) || num(r.cva_score) != null)) return;
+      var p = d.parts[r.participant_id] || {};
+      var isMem = !!p.member_id;
+      var name = isMem ? ((p.members && p.members.name) || "멤버") : (p.guest_name || "게스트");
+      var batch = isMem ? cleanBatch(p.members && p.members.batch) : "게스트";
+      var aroma = uniqNotes([].concat(r.notes_fragrance || [], r.notes_aroma || [], r.notes_custom || []));
+      var flavor = uniqNotes([].concat(r.notes_tasting || []));
+      var qn = r.q_notes || {}, memo = [];
+      QN.forEach(function (q) { var t = String(qn[q[0]] == null ? "" : qn[q[0]]).trim(); if (t) memo.push(q[1] + " · " + t); });
+      var first = [];
+      var pv = isMem ? d.prev[p.member_id] : null;
+      if (pv && Object.keys(pv).length) first = aroma.concat(flavor).filter(function (n) { return !pv[nk(n)]; });
+      cards.push({
+        kind: kind, date: dateTxt(d.sess.scheduled_at), title: String(d.sess.title || "").trim(),
+        bean: String(b.name || "").trim(), info: info,
+        batch: batch, name: name, shown: mask(name), cva: num(r.cva_score),
+        v: KEYS.map(function (k) { return num(r[k]); }), ref: refHasInt ? KEYS.map(function (k) { return num(ref[k]); }) : null,
+        aroma: aroma, flavor: flavor, refSet: refSet, memo: memo, first: uniqNotes(first)
+      });
+    });
+    cards.sort(function (a, b) { return String(a.batch + a.name).localeCompare(String(b.batch + b.name), "ko"); });
+    return cards;
+  }
+
+  /* ── 캔버스 그리기 (화면 540 기준 · 2배 저장) ── */
+  async function ensureFonts(cards) {
+    try {
+      if (!document.fonts || !document.fonts.load) return;
+      var s = "0123456789./·~-%,()CVAWECOFFEE*" + LABS.join("") + "향맛메모처음짚은노트내강도기준지역농장가공품종고도로스팅";
+      cards.forEach(function (c) { s += c.kind + c.date + c.title + c.bean + c.batch + c.shown + c.aroma.join("") + c.flavor.join("") + c.memo.join("") + c.first.join("") + c.info.map(function (x) { return x[1]; }).join(""); });
+      await Promise.all(["500", "600", "700", "800"].map(function (w) { return document.fonts.load(w + " 16px Pretendard", s); }));
+    } catch (e) { /* 폰트 없으면 기본 글꼴 */ }
+  }
+  function wrapText(x, text, maxW) {
+    var tokens = String(text || "").split(/(\s+)/).filter(Boolean), lines = [], cur = "";
+    function longWord(w) { var chunk = ""; Array.from(w).forEach(function (ch) { if (x.measureText(chunk + ch).width > maxW && chunk) { lines.push(chunk); chunk = ch; } else chunk += ch; }); return chunk; }
+    tokens.forEach(function (t) {
+      if (/^\s+$/.test(t)) { if (cur) cur += " "; return; }
+      if (x.measureText(cur + t).width <= maxW) { cur += t; return; }
+      if (cur.trim()) { lines.push(cur.trim()); cur = ""; }
+      cur = x.measureText(t).width > maxW ? longWord(t) : t;
+    });
+    if (cur.trim()) lines.push(cur.trim());
+    return lines;
+  }
+  function rr(x, X, Y, w, h, r) { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); }
+  function drawCard(c) {
+    var S = 2, W = 540, P = 34, IN = W - P * 2;
+    var cv = document.createElement("canvas"); cv.width = W * S; cv.height = 2000 * S;
+    var x = cv.getContext("2d"); x.scale(S, S);
+    function font(w, s) { x.font = w + " " + s + "px " + FONT; }
+    function tx(t, X, Y, col, al) { x.fillStyle = col; x.textAlign = al || "left"; x.textBaseline = "alphabetic"; x.fillText(t, X, Y); }
+    function line(y) { x.fillStyle = "#f2f4f6"; x.fillRect(P, y, IN, 1); }
+    x.fillStyle = "#fff"; x.fillRect(0, 0, W, 2000);
+    var y = P;
+    // 세션 종류 · 날짜
+    font(800, 12.5); tx(c.kind, P, y + 12, "#ea6f00");
+    font(600, 12.5); tx(c.date, W - P, y + 12, "#8b95a1", "right");
+    y += 12 + 14;
+    // 원두 이름
+    font(800, 21); var bl = wrapText(x, c.bean, IN);
+    bl.forEach(function (l) { tx(l, P, y + 22, "#191f28"); y += 29; });
+    // 원두 정보 (항목 이름 + 값, 2열)
+    if (c.info.length) {
+      y += 10;
+      var colW = IN / 2, labW = 44;
+      for (var i = 0; i < c.info.length; i += 2) {
+        var rowH = 0;
+        [c.info[i], c.info[i + 1]].forEach(function (it, j) {
+          if (!it) return;
+          var X = P + j * colW;
+          font(500, 13); tx(it[0], X, y + 14, "#8b95a1");
+          font(600, 13); var vl = wrapText(x, it[1], colW - labW - 12);
+          vl.forEach(function (l, k) { tx(l, X + labW, y + 14 + k * 19, "#4e5968"); });
+          rowH = Math.max(rowH, vl.length * 19);
+        });
+        y += rowH + 5;
+      }
+    }
+    // 멤버 · CVA
+    y += 20;
+    font(700, 11.5); tx("CVA", W - P, y + 10, "#8b95a1", "right");
+    font(800, 34); tx(cvaTxt(c.cva), W - P, y + 46, "#ea6f00", "right");
+    font(600, 13); tx(c.batch, P, y + 44, "#8b95a1");
+    var bw = c.batch ? x.measureText(c.batch).width + 7 : 0;
+    font(800, 17); tx(c.shown, P + bw, y + 44, "#191f28");
+    y += 64; line(y); y += 12;
+    // 레이더 + 강도
+    var RX = P - 14, BOX = 224, cx = RX + BOX / 2, cy = y + BOX / 2, R = 70, N = 7;
+    function pt(i, v) { var a = -Math.PI / 2 + i * 2 * Math.PI / N, r = R * Math.max(0, Math.min(15, v || 0)) / 15; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; }
+    function poly(vals, stroke, fill, w, dash) {
+      x.beginPath(); vals.forEach(function (v, i) { var p = pt(i, v); if (i) x.lineTo(p[0], p[1]); else x.moveTo(p[0], p[1]); }); x.closePath();
+      if (fill) { x.fillStyle = fill; x.fill(); }
+      x.setLineDash(dash || []); x.lineWidth = w; x.strokeStyle = stroke; x.stroke(); x.setLineDash([]);
+    }
+    [5, 10, 15].forEach(function (l) { poly([l, l, l, l, l, l, l], "#eef0f3", null, 1); });
+    for (var a = 0; a < N; a++) { var e = pt(a, 15); x.beginPath(); x.moveTo(cx, cy); x.lineTo(e[0], e[1]); x.strokeStyle = "#eef0f3"; x.lineWidth = 1; x.stroke(); }
+    font(600, 10.5); for (var b = 0; b < N; b++) { var t = pt(b, 18.6); tx(LABS[b], t[0], t[1] + 4, "#8b95a1", "center"); }
+    if (c.ref) poly(c.ref, "#b0b8c1", null, 1.5, [4, 3]);
+    poly(c.v, "#ff7900", "rgba(255,121,0,.12)", 2);
+    var LX = RX + BOX + 10, LW = W - P - LX, ly = y + (BOX - (7 * 24 + 28)) / 2;
+    LABS.forEach(function (lab, i) {
+      var yy = ly + i * 24 + 14;
+      font(500, 12.5); tx(lab, LX, yy, "#6b7684");
+      if (c.ref) {
+        font(500, 12.5); var rt = " / " + f1(c.ref[i]); tx(rt, W - P, yy, "#b0b8c1", "right");
+        var rw = x.measureText(rt).width; font(700, 12.5); tx(f1(c.v[i]), W - P - rw, yy, "#191f28", "right");
+      } else { font(700, 12.5); tx(f1(c.v[i]), W - P, yy, "#191f28", "right"); }
+    });
+    var gy = ly + 7 * 24 + 20;
+    x.fillStyle = "#ff7900"; x.fillRect(LX, gy - 4, 14, 2); font(500, 11); tx("내 강도", LX + 19, gy, "#8b95a1");
+    if (c.ref) { var gx = LX + 19 + x.measureText("내 강도").width + 12; x.setLineDash([4, 3]); x.strokeStyle = "#b0b8c1"; x.lineWidth = 2; x.beginPath(); x.moveTo(gx, gy - 3); x.lineTo(gx + 14, gy - 3); x.stroke(); x.setLineDash([]); tx("기준", gx + 19, gy, "#8b95a1"); }
+    y += BOX;
+    // 향 · 맛 노트
+    function chips(arr) {
+      var X = P;
+      font(600, 12.5);
+      arr.forEach(function (n) {
+        var w = x.measureText(n).width + 18, hit = !!c.refSet[nk(n)];
+        if (X + w > W - P && X > P) { X = P; y += 32; }
+        rr(x, X + 0.5, y + 0.5, w - 1, 26, 8); x.fillStyle = "#fff"; x.fill(); x.lineWidth = 1; x.strokeStyle = hit ? "#ffd7b5" : "#e5e8eb"; x.stroke();
+        tx(n, X + 9, y + 17.5, hit ? "#ea6f00" : "#4e5968");
+        X += w + 6;
+      });
+      y += 26;
+    }
+    function head(t, sub) { font(800, 12); tx(t, P, y + 12, "#191f28"); if (sub) { var w = x.measureText(t).width + 5; font(600, 12); tx(sub, P + w, y + 12, "#8b95a1"); } y += 20; }
+    if (c.aroma.length) { y += 18; head("향", "프래그런스 · 아로마"); chips(c.aroma); }
+    if (c.flavor.length) { y += 18; head("맛", "향미 · 뒷맛"); chips(c.flavor); }
+    if (c.memo.length) {
+      y += 18; head("메모");
+      font(500, 13);
+      c.memo.forEach(function (m) { wrapText(x, m, IN).forEach(function (l) { tx(l, P, y + 15, "#4e5968"); y += 21; }); });
+    }
+    if (c.first.length) {
+      y += 16; line(y); y += 14;
+      font(800, 13); tx("처음 짚은 노트", P, y + 14, "#00b386");
+      var fw = x.measureText("처음 짚은 노트").width + 8;
+      font(500, 13); var fl = wrapText(x, c.first.join(" · "), IN - fw);
+      fl.forEach(function (l, i) { tx(l, P + fw, y + 14 + i * 20, "#4e5968"); });
+      y += fl.length * 20;
+    }
+    // 바닥
+    var fy = Math.max(y + 34, 675 - P);
+    font(800, 11.5); try { x.letterSpacing = "0.7px"; } catch (e) {}
+    tx("WECOFFEE", P, fy, "#191f28");
+    try { x.letterSpacing = "0px"; } catch (e) {}
+    font(600, 11.5); var tt = c.title || "센서리 훈련 커핑"; while (x.measureText(tt).width > IN - 110 && tt.length > 4) tt = tt.slice(0, -2); if (tt !== (c.title || "센서리 훈련 커핑")) tt += "…";
+    tx(tt, W - P, fy, "#b0b8c1", "right");
+    var H = Math.ceil(fy + P - 6);
+    var out = document.createElement("canvas"); out.width = W * S; out.height = H * S;
+    out.getContext("2d").drawImage(cv, 0, 0, W * S, H * S, 0, 0, W * S, H * S);
+    return out;
+  }
+  function canvasBlob(cv) { return new Promise(function (res) { cv.toBlob(function (b) { res(b); }, "image/png"); }); }
+
+  /* ── zip (무압축 · 한글 파일명) ── */
+  var CRC = null;
+  function crc32(u8) {
+    if (!CRC) { CRC = new Uint32Array(256); for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); CRC[n] = c >>> 0; } }
+    var crc = 0xFFFFFFFF; for (var i = 0; i < u8.length; i++) crc = CRC[(crc ^ u8[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function makeZip(files) {
+    var enc = new TextEncoder(), parts = [], central = [], off = 0;
+    var now = new Date(), dt = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF, dd = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), data = f.data, crc = crc32(data);
+      var lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+      lh.setUint16(10, dt, true); lh.setUint16(12, dd, true); lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+      lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(new Uint8Array(lh.buffer), name, data);
+      var ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+      ch.setUint16(12, dt, true); ch.setUint16(14, dd, true); ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+      ch.setUint16(28, name.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true); ch.setUint32(42, off, true);
+      central.push(new Uint8Array(ch.buffer), name);
+      off += 30 + name.length + data.length;
+    });
+    var cs = central.reduce(function (a, b) { return a + b.length; }, 0);
+    var end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cs, true); end.setUint32(16, off, true);
+    return new Blob(parts.concat(central, [new Uint8Array(end.buffer)]), { type: "application/zip" });
+  }
+  function safeName(s) { return String(s || "").replace(/[\\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60); }
+  function fileName(c) { return "커핑평가카드_" + safeName(c.title || "세션") + "_" + safeName(c.bean) + "_" + safeName((c.batch ? c.batch + "_" : "") + c.name) + ".png"; }
+  function download(blob, name) {
+    var a = document.createElement("a"), u = URL.createObjectURL(blob);
+    a.href = u; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 1500);
+  }
+
+  /* ── 모달 ── */
+  var M = { cards: [], blobs: [], urls: [] };
+  function styleOnce() {
+    if (_$("wcCardStyle")) return;
+    var st = document.createElement("style"); st.id = "wcCardStyle";
+    st.textContent =
+      "#wcCardOly{position:fixed;inset:0;z-index:100000;background:rgba(25,31,40,.45);display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto;}" +
+      "#wcCardOly .pn{background:#fff;border-radius:18px;width:100%;max-width:1180px;padding:22px 22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.18);font-family:Pretendard,sans-serif;}" +
+      "#wcCardOly .hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}" +
+      "#wcCardOly .hd b{font-size:17px;font-weight:800;color:#191f28;}" +
+      "#wcCardOly .x{width:34px;height:34px;border:1px solid #e5e8eb;border-radius:9px;background:#fff;cursor:pointer;color:#4e5968;display:inline-flex;align-items:center;justify-content:center;}" +
+      "#wcCardOly .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;}" +
+      "#wcCardOly select{height:36px;border:1px solid #e5e8eb;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;padding:0 12px;background:#fff;color:#191f28;max-width:100%;}" +
+      "#wcCardOly .n{font-size:13px;color:#8b95a1;}" +
+      "#wcCardOly .all{margin-left:auto;height:36px;padding:0 14px;border:1px solid #ff7900;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}" +
+      "#wcCardOly .all:disabled{opacity:.45;cursor:default;}" +
+      "#wcCardOly .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px;}" +
+      "#wcCardOly .it img{width:100%;display:block;border:1px solid #eef0f3;border-radius:12px;}" +
+      "#wcCardOly .it .r{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:13px;font-weight:700;color:#191f28;}" +
+      "#wcCardOly .it button{height:30px;padding:0 11px;border:1px solid #e5e8eb;border-radius:8px;background:#fff;color:#4e5968;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}" +
+      "#wcCardOly .em{padding:40px 0;text-align:center;color:#8b95a1;font-size:13px;}" +
+      "@media (max-width:600px){#wcCardOly{padding:12px 8px;}#wcCardOly .all{margin-left:0;}#wcCardOly .grid{grid-template-columns:1fr 1fr;gap:12px;}}";
+    document.head.appendChild(st);
+  }
+  function freeUrls() { M.urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); M.urls = []; }
+  window.wcCardClose = function () { freeUrls(); var o = _$("wcCardOly"); if (o) o.remove(); };
+  window.wcCardOpen = async function () {
+    var sid = curSid(); if (!sid) { toast("세션을 먼저 열어 주세요."); return; }
+    var beans = beansOf(sid);
+    if (!beans.length) { toast("원두 라인업이 없어요."); return; }
+    styleOnce(); window.wcCardClose();
+    var cur = _$("cupRvBean") ? _$("cupRvBean").value : "";
+    if (!cur || cur === "__all__" || !beans.some(function (b) { return String(b.id) === String(cur); })) cur = beans[0].id;
+    var o = document.createElement("div"); o.id = "wcCardOly";
+    o.innerHTML = '<div class="pn"><div class="hd"><b>커핑 평가 카드</b><button type="button" class="x" aria-label="닫기" onclick="window.wcCardClose()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+      '<div class="bar"><select id="wcCardBean">' + beans.map(function (b, i) { return '<option value="' + esc(b.id) + '"' + (String(b.id) === String(cur) ? " selected" : "") + '>' + (i + 1) + ". " + esc(b.name) + '</option>'; }).join("") + '</select>' +
+      '<span class="n" id="wcCardN"></span><button type="button" class="all" id="wcCardAll" disabled onclick="window.wcCardSaveAll()">전체 저장 (zip)</button></div>' +
+      '<div id="wcCardGrid"><div class="em">카드 만드는 중…</div></div></div>';
+    o.addEventListener("click", function (e) { if (e.target === o) window.wcCardClose(); });
+    document.body.appendChild(o);
+    _$("wcCardBean").onchange = function () { render(sid, this.value); };
+    render(sid, cur);
+  };
+  var _seq = 0;
+  async function render(sid, beanId) {
+    var my = ++_seq, grid = _$("wcCardGrid"), all = _$("wcCardAll"), nEl = _$("wcCardN");
+    if (!grid) return;
+    grid.innerHTML = '<div class="em">카드 만드는 중…</div>'; if (all) all.disabled = true; if (nEl) nEl.textContent = "";
+    freeUrls(); M.cards = []; M.blobs = [];
+    try {
+      var d = await loadCardData(sid, beanId); if (my !== _seq) return;
+      var cards = buildCards(d);
+      if (!cards.length) { grid.innerHTML = '<div class="em">이 원두에 입력된 평가가 없어요.</div>'; return; }
+      await ensureFonts(cards); if (my !== _seq) return;
+      var blobs = [];
+      for (var i = 0; i < cards.length; i++) { blobs.push(await canvasBlob(drawCard(cards[i]))); if (my !== _seq) return; }
+      M.cards = cards; M.blobs = blobs;
+      grid.innerHTML = '<div class="grid">' + cards.map(function (c, i) {
+        var u = URL.createObjectURL(blobs[i]); M.urls.push(u);
+        return '<div class="it"><img src="' + u + '" alt=""><div class="r"><span>' + esc((c.batch ? c.batch + " " : "") + c.shown) + '</span><button type="button" onclick="window.wcCardSave(' + i + ')">저장</button></div></div>';
+      }).join("") + '</div>';
+      if (nEl) nEl.textContent = cards.length + "명";
+      if (all) all.disabled = false;
+    } catch (e) {
+      console.error("[평가 카드] 만들기 실패", e);
+      if (my === _seq) grid.innerHTML = '<div class="em">카드를 만들지 못했어요. 새로고침 후 다시 시도해 주세요.</div>';
+    }
+  }
+  window.wcCardSave = function (i) { if (M.blobs[i]) download(M.blobs[i], fileName(M.cards[i])); };
+  window.wcCardSaveAll = async function () {
+    if (!M.blobs.length) return;
+    var files = [];
+    for (var i = 0; i < M.blobs.length; i++) files.push({ name: fileName(M.cards[i]), data: new Uint8Array(await M.blobs[i].arrayBuffer()) });
+    var c0 = M.cards[0];
+    download(makeZip(files), "커핑평가카드_" + safeName(c0.title || "세션") + "_" + safeName(c0.bean) + ".zip");
+  };
+  // 버튼: 참가자 평가 조회 영역의 CSV 버튼 옆
+  function injectBtn() {
+    if (_$("wcCardBtn")) return true;
+    var csv = document.querySelector('#cupRvInline button[onclick*="cupRvExportCsv"]');
+    if (!csv) return false;
+    var b = document.createElement("button");
+    b.type = "button"; b.id = "wcCardBtn";
+    b.style.cssText = "height:32px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;border:1px solid #ffd7b5;border-radius:8px;background:#fff;cursor:pointer;color:#ea6f00;font-size:12px;font-weight:700;font-family:inherit;margin-left:auto;margin-right:6px;";
+    b.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg> 평가 카드 만들기';
+    b.onclick = window.wcCardOpen;
+    csv.parentNode.insertBefore(b, csv);
+    return true;
+  }
+  var _o = window.openCuppingLineup;
+  window.openCuppingLineup = async function () {
+    if (_o) await _o.apply(this, arguments);
+    try { injectBtn(); } catch (e) { console.warn("[평가 카드] 버튼 주입 실패", e); }
+  };
+  document.addEventListener("click", function (e) { if (e.target && e.target.closest && e.target.closest("#cupRvBtn")) setTimeout(injectBtn, 0); }, true);
+  window.wcCardDraw = drawCard;   // 검증용
+
+  /* ═══════════════ 2. 향미 노트 성장 ═══════════════ */
+  var _ng = {};
+  async function noteData(phone) {
+    var d = digits(phone), last4 = d.slice(-4);
+    if (_ng[d] && Date.now() - _ng[d].at < 60000) return _ng[d].v;
+    var v = { recs: [], sess: {}, refs: {} };
+    if (last4.length < 4) return v;
+    var mr = await supabaseClient.from("members").select("id,phone").ilike("phone", "%" + last4);
+    var mids = (mr.data || []).filter(function (m) { return digits(m.phone) === d; }).map(function (m) { return m.id; });
+    var parts = [];
+    if (mids.length) { var p1 = await supabaseClient.from("cupping_participants").select("id,session_id,member_id,guest_phone").in("member_id", mids); parts = parts.concat(p1.data || []); }
+    var p2 = await supabaseClient.from("cupping_participants").select("id,session_id,member_id,guest_phone").ilike("guest_phone", "%" + last4);
+    (p2.data || []).forEach(function (p) { if (!p.member_id && digits(p.guest_phone) === d) parts.push(p); });
+    var pids = parts.map(function (p) { return p.id; });
+    if (pids.length) {
+      var rr2 = await supabaseClient.from("cupping_records").select("participant_id,session_id,bean_id,form_type,notes_fragrance,notes_aroma,notes_tasting,notes_custom").in("participant_id", pids);
+      v.recs = (rr2.data || []).filter(function (r) { return r.form_type !== "basic"; });
+      var sids = [], bids = [];
+      v.recs.forEach(function (r) { if (r.session_id && sids.indexOf(r.session_id) < 0) sids.push(r.session_id); if (r.bean_id && bids.indexOf(r.bean_id) < 0) bids.push(r.bean_id); });
+      if (sids.length) { var sq = await supabaseClient.from("cupping_sessions").select("id,scheduled_at,title").in("id", sids); (sq.data || []).forEach(function (s) { v.sess[s.id] = s; }); }
+      if (bids.length) { var rq = await supabaseClient.from("cupping_references").select("bean_id,ref_notes").in("bean_id", bids); (rq.data || []).forEach(function (x) { v.refs[x.bean_id] = x; }); }
+    }
+    _ng[d] = { at: Date.now(), v: v };
+    return v;
+  }
+  function computeNotes(v) {
+    var now = Date.now(), RECENT = 28 * 864e5;
+    var recs = v.recs.map(function (r) {
+      var s = v.sess[r.session_id] || {}, at = s.scheduled_at ? new Date(s.scheduled_at).getTime() : 0;
+      return { r: r, at: at, sid: r.session_id, notes: uniqNotes([].concat(r.notes_fragrance || [], r.notes_aroma || [], r.notes_tasting || [], r.notes_custom || [])) };
+    }).filter(function (x) { return x.at; }).sort(function (a, b) { return a.at - b.at; });
+    // 표현 범위 (처음 쓴 날)
+    var seen = {};
+    recs.forEach(function (x) { x.notes.forEach(function (n) { var k = nk(n); if (!seen[k]) seen[k] = { label: n, at: x.at }; }); });
+    var vocab = Object.keys(seen).length;
+    var recentNew = Object.keys(seen).map(function (k) { return seen[k]; }).filter(function (s) { return now - s.at <= RECENT; }).sort(function (a, b) { return b.at - a.at; });
+    // 캘리브레이션 (기준 노트 있는 원두만)
+    var bySess = {}, occ = {};
+    recs.forEach(function (x) {
+      var ref = v.refs[x.r.bean_id], rn = uniqNotes((ref && ref.ref_notes) || []); if (!rn.length) return;
+      var mine = {}; x.notes.forEach(function (n) { mine[nk(n)] = 1; });
+      var ss = bySess[x.sid] = bySess[x.sid] || { at: x.at, tot: 0, hit: 0 };
+      rn.forEach(function (n) {
+        var k = nk(n), h = !!mine[k];
+        ss.tot++; if (h) ss.hit++;
+        (occ[k] = occ[k] || { label: n, list: [] }).list.push({ at: x.at, hit: h });
+      });
+    });
+    var pts = Object.keys(bySess).map(function (k) { var s = bySess[k]; return { at: s.at, rate: s.tot ? Math.round(s.hit / s.tot * 100) : 0 }; }).sort(function (a, b) { return a.at - b.at; });
+    var missed = [], late = [];
+    Object.keys(occ).forEach(function (k) {
+      var o = occ[k], list = o.list.sort(function (a, b) { return a.at - b.at; }), hits = list.filter(function (z) { return z.hit; }).length;
+      if (list.length >= 3 && !hits) missed.push({ label: o.label, n: list.length });
+      var fi = -1; for (var i = 0; i < list.length; i++) if (list[i].hit) { fi = i; break; }
+      if (fi >= 2) late.push({ label: o.label, miss: fi, at: list[fi].at });
+    });
+    missed.sort(function (a, b) { return b.n - a.n; }); late.sort(function (a, b) { return b.at - a.at; });
+    return { recs: recs, vocab: vocab, recentNew: recentNew, pts: pts, missed: missed.slice(0, 10), late: late.slice(0, 6) };
+  }
+  function chartSVG(pts) {
+    var W = 700, H = 150, L = 34, R = 20, T = 12, B = 24, h = "";
+    function X(i) { return L + (pts.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (pts.length - 1)); }
+    function Y(v) { return T + (100 - v) / 100 * (H - T - B); }
+    [0, 50, 100].forEach(function (v) { h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="#f2f4f6"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" font-size="10.5" fill="#b0b8c1" text-anchor="end">' + v + '%</text>'; });
+    h += '<polyline points="' + pts.map(function (p, i) { return X(i) + "," + Y(p.rate); }).join(" ") + '" fill="none" stroke="#ff7900" stroke-width="2" stroke-linejoin="round"/>';
+    var step = Math.max(1, Math.ceil(pts.length / 7));
+    pts.forEach(function (p, i) {
+      h += '<circle cx="' + X(i) + '" cy="' + Y(p.rate) + '" r="3" fill="#fff" stroke="#ff7900" stroke-width="2"><title>' + mdTxt(p.at) + ' · ' + p.rate + '%</title></circle>';
+      if (i % step === 0 || i === pts.length - 1) h += '<text x="' + X(i) + '" y="' + (H - 6) + '" font-size="10.5" fill="#b0b8c1" text-anchor="middle">' + mdTxt(p.at) + '</text>';
+    });
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;">' + h + '</svg>';
+  }
+  var CHIP = "display:inline-block;font-size:12.5px;font-weight:600;color:#4e5968;border:1px solid #e5e8eb;border-radius:8px;padding:4px 9px;background:#fff;";
+  function notesHTML(c) {
+    var K = 'font-size:12px;font-weight:700;color:#8b95a1;', V = 'font-size:22px;font-weight:800;letter-spacing:-.03em;margin-top:4px;color:#191f28;', SM = 'font-size:13px;font-weight:700;color:#8b95a1;margin:0 4px;', SB = 'font-size:12px;color:#8b95a1;margin-top:2px;';
+    var h = '<div style="font-size:13px;font-weight:800;color:#191f28;margin:20px 0 14px;">향미 노트 성장 <span style="font-size:11px;font-weight:600;color:#8b95a1;">· 캘리브레이션 기준 노트와 비교</span></div>';
+    var kp = [];
+    if (c.pts.length) {
+      var k = Math.min(3, Math.max(1, Math.floor(c.pts.length / 2)));
+      var avg = function (a) { return Math.round(a.reduce(function (s, p) { return s + p.rate; }, 0) / a.length); };
+      if (c.pts.length >= 2) kp.push('<div><div style="' + K + '">찾은 노트</div><div style="' + V + '">' + avg(c.pts.slice(0, k)) + '%<small style="' + SM + '">→</small>' + avg(c.pts.slice(-k)) + '%</div><div style="' + SB + '">처음 ' + k + '회 → 최근 ' + k + '회</div></div>');
+      else kp.push('<div><div style="' + K + '">찾은 노트</div><div style="' + V + '">' + c.pts[0].rate + '%</div><div style="' + SB + '">1회</div></div>');
+    }
+    kp.push('<div><div style="' + K + '">표현 범위</div><div style="' + V + '">' + c.vocab + '<small style="' + SM + '">가지</small></div><div style="' + SB + '">최근 4주 <span style="color:#00b386;font-weight:700;">+' + c.recentNew.length + '</span></div></div>');
+    kp.push('<div><div style="' + K + '">캘리브레이션</div><div style="' + V + '">' + c.pts.length + '<small style="' + SM + '">회</small></div><div style="' + SB + '">' + (c.pts.length ? mdTxt(c.pts[0].at) + ' ~ ' + mdTxt(c.pts[c.pts.length - 1].at) : '기준 노트 있는 기록 없음') + '</div></div>');
+    h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;">' + kp.join("") + '</div>';
+    if (c.pts.length >= 2) h += '<div style="border-top:1px solid #f2f4f6;border-bottom:1px solid #f2f4f6;padding:14px 0 6px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;color:#4e5968;margin-bottom:6px;">세션별 찾은 노트 <span style="font-weight:600;color:#8b95a1;">기준 노트 중 짚은 비율</span></div>' + chartSVG(c.pts) + '</div>';
+    function grp(t, d, inner, last) { return '<div style="margin-bottom:' + (last ? 0 : 18) + 'px;"><div style="font-size:13px;font-weight:800;color:#191f28;margin-bottom:4px;">' + t + '</div><div style="font-size:12px;color:#8b95a1;margin-bottom:10px;">' + d + '</div>' + inner + '</div>'; }
+    var gs = [];
+    if (c.missed.length) gs.push(['계속 놓치는 노트', '기준에 3번 이상 나왔는데 한 번도 못 짚은 노트', '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + c.missed.map(function (m) { return '<span style="' + CHIP + '">' + esc(m.label) + '<b style="font-weight:700;color:#e5484d;margin-left:5px;">0/' + m.n + '</b></span>'; }).join("") + '</div>']);
+    if (c.late.length) gs.push(['늦게 찾은 노트', '처음엔 놓치다가 짚기 시작한 노트', c.late.map(function (l, i) { return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:8px 0;' + (i < c.late.length - 1 ? 'border-bottom:1px solid #f7f8fa;' : '') + '"><span style="font-weight:700;color:#191f28;">' + esc(l.label) + '</span><span style="color:#8b95a1;font-size:12.5px;">' + l.miss + '번 놓친 뒤 <b style="color:#4e5968;font-weight:700;">' + mdTxt(l.at) + '</b>부터 짚음</span></div>'; }).join("")]);
+    if (c.recentNew.length) gs.push(['최근 처음 쓴 노트', '최근 4주 동안 처음 쓴 표현', '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + c.recentNew.slice(0, 14).map(function (s) { return '<span style="' + CHIP + 'color:#00996b;border-color:#c7ead7;">' + esc(s.label) + '</span>'; }).join("") + '</div>']);
+    gs.forEach(function (g, i) { h += grp(g[0], g[1], g[2], i === gs.length - 1); });
+    return '<div class="wcng">' + h + '</div>';
+  }
+  window.wcNoteGrowthFill = async function (el, phone) {
+    if (!el || typeof supabaseClient === "undefined") return;
+    el.innerHTML = '<div style="padding:12px 0;color:#8b95a1;font-size:13px;">향미 노트 불러오는 중…</div>';
+    try {
+      var c = computeNotes(await noteData(phone));
+      if (!document.body.contains(el)) return;
+      el.innerHTML = c.recs.length ? notesHTML(c) : "";
+    } catch (e) { console.warn("[향미 노트] 불러오기 실패", e); if (document.body.contains(el)) el.innerHTML = ""; }
+  };
+  window.wcNoteGrowthCompute = computeNotes;   // 검증용
+})();
+/* ═══ 커핑 13 끝 ═══ */
