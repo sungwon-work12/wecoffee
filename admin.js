@@ -8390,7 +8390,9 @@ window.hideCalibration = async function() {
       P + ".crbean{border:1px solid #e5e8eb;border-radius:10px;padding:9px 13px;background:#fff;font-family:inherit;font-size:13px;font-weight:600;color:#191f28;cursor:pointer;text-align:left;}" +
       P + ".crbean span{color:#8b95a1;font-weight:500;margin-left:6px;font-size:12px;}" +
       P + ".crbean.on{border-color:#ff7900;color:#ea6f00;font-weight:700;}" + P + ".crbean.on span{color:#ea6f00;}" +
-      "@media (max-width:600px){" + P + ".crq{width:auto;flex:1;min-width:0;}" + P + ".crlist{padding:4px 10px 8px;}" + P + ".crexp{margin-left:0;}" +
+      P + ".crinfo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 18px;margin:-4px 0 18px;padding:0 0 16px;border-bottom:1px solid #f2f4f6;}" +
+      P + ".crinfo span{display:flex;gap:10px;font-size:13px;font-weight:600;color:#4e5968;min-width:0;word-break:keep-all;}" + P + ".crinfo i{font-style:normal;font-weight:500;color:#8b95a1;flex-shrink:0;width:40px;}" +
+      "@media (max-width:600px){" + P + ".crinfo{grid-template-columns:1fr 1fr;}" + P + ".crq{width:auto;flex:1;min-width:0;}" + P + ".crlist{padding:4px 10px 8px;}" + P + ".crexp{margin-left:0;}" +
         P + ".crhead{display:none!important;}" +
         P + ".crlist.s .crrow{grid-template-columns:1fr auto;row-gap:3px;}" + P + ".crlist.s .crrow .c1{grid-column:1/-1;font-size:12px;color:#8b95a1;}" +
         P + ".crlist.s .crrow .c3," + P + ".crlist.s .crrow .c4," + P + ".crlist.s .crrow .c5," + P + ".crlist.s .crrow .c6{display:none;}" +
@@ -8442,7 +8444,7 @@ window.hideCalibration = async function() {
     try {
       var r = await Promise.all([
         fetchAll("cupping_sessions", "id,title,scheduled_at,center,created_via"),
-        fetchAll("cupping_beans", "id,session_id,name,sort_order"),
+        fetchAll("cupping_beans", "id,session_id,name,sort_order,origin,farm,process,variety,altitude,roast_level"),
         fetchAll("cupping_records", "session_id,bean_id,participant_id,form_type")
       ]);
       var beans = {}; r[1].forEach(function (b) { (beans[b.session_id] = beans[b.session_id] || []).push(b); });
@@ -8506,7 +8508,7 @@ window.hideCalibration = async function() {
       '<span class="crdt">' + esc(s.title || "센서리 훈련 커핑") + '</span><span class="crdm">' + [dateTxt(s.scheduled_at), centerTxt(s.center), "참가 " + Object.keys(c.people).length + "명"].filter(Boolean).join(" · ") + '</span>' +
       '<button type="button" class="crexp" data-crexp="1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg>평가 카드로 보기</button></div>' +
       '<div class="crpanel"><div class="crbeans">' + beans.map(function (b, i) { var n = Object.keys(bc[b.id] || {}).length; return '<button type="button" class="crbean' + (String(b.id) === String(bid) ? ' on' : '') + '" data-crbean="' + esc(b.id) + '">' + (i + 1) + ". " + esc(b.name) + '<span>' + n + '명</span></button>'; }).join("") + '</div>' +
-      '<div id="crRv"><div class="crem">불러오는 중…</div></div></div>';
+      '<div id="crBeanInfo"></div><div id="crRv"><div class="crem">불러오는 중…</div></div></div>';
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
     // 세션 정보(평가 방식 안내 배너용) — 결과보기가 window._cuppingSession 을 봄
     try { var sr = await supabaseClient.from("cupping_sessions").select("*").eq("id", s.id).maybeSingle(); if (sr.data) { s._full = sr.data; } } catch (e) {}
@@ -8515,6 +8517,13 @@ window.hideCalibration = async function() {
   async function crBean(bid) {
     var sid = CR.selS; CR.selB = bid;
     document.querySelectorAll("#crDetView .crbean").forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-crbean") === String(bid)); });
+    // 11-03: 고른 원두 정보 (카드와 같은 항목 · 적어 둔 것만)
+    var bi = _$("crBeanInfo");
+    if (bi) {
+      var bo = (CR.beans[sid] || []).filter(function (b) { return String(b.id) === String(bid); })[0] || {};
+      var it = [["지역", bo.origin], ["농장", bo.farm], ["가공", bo.process], ["품종", bo.variety], ["고도", bo.altitude], ["로스팅", bo.roast_level]].filter(function (x) { return String(x[1] == null ? "" : x[1]).trim(); });
+      bi.innerHTML = it.length ? '<div class="crinfo">' + it.map(function (x) { return '<span><i>' + x[0] + '</i>' + esc(String(x[1]).trim()) + '</span>'; }).join("") + '</div>' : '';
+    }
     var box = _$("crRv"); if (!box) return;
     box.innerHTML = '<div class="crem">불러오는 중…</div>';
     var my = ++CR.seq;
