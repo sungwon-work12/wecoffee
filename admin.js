@@ -5004,7 +5004,15 @@ window.hideCalibration = async function() {
     } catch (e) { console.error("[cupping] CSV 내보내기 실패", e); if (typeof showToast === "function") showToast("내보내기 실패"); }
   };
   /* ── 렌더(좌우 스크롤 없음). 멤버리스트(파트8)에서도 재사용 ── */
+  /* 11-03: 모바일 결과보기 표 — 관리자 공통 표(카드형) 규칙에서 빼서 원래 표로 */
+  function rvTblStyle() {
+    if (document.getElementById("wcRvTblStyle")) return;
+    var st = document.createElement("style"); st.id = "wcRvTblStyle";
+    st.textContent = '@media (max-width:768px){table.wc-rv-t.wc-rv-t,table.wc-mx-tbl.wc-mx-tbl{display:table!important;}table.wc-rv-t.wc-rv-t{width:100%!important;}table.wc-rv-t.wc-rv-t thead,table.wc-mx-tbl.wc-mx-tbl thead{display:table-header-group!important;}table.wc-rv-t.wc-rv-t tbody,table.wc-mx-tbl.wc-mx-tbl tbody{display:table-row-group!important;}table.wc-rv-t.wc-rv-t tr,table.wc-mx-tbl.wc-mx-tbl tr{display:table-row!important;padding:0!important;border:none!important;border-radius:0!important;box-shadow:none!important;position:static!important;}table.wc-rv-t.wc-rv-t th,table.wc-rv-t.wc-rv-t td,table.wc-mx-tbl.wc-mx-tbl th,table.wc-mx-tbl.wc-mx-tbl td{display:table-cell!important;width:auto!important;padding:8px 6px!important;border-bottom:none!important;vertical-align:middle;}table.wc-mx-tbl.wc-mx-tbl th,table.wc-mx-tbl.wc-mx-tbl td{white-space:nowrap!important;}table.wc-rv-t.wc-rv-t td::before,table.wc-mx-tbl.wc-mx-tbl td::before{content:none!important;display:none!important;}}';
+    document.head.appendChild(st);
+  }
   window.wcRenderReview = function (recs, ref, names, beanName) {
+    rvTblStyle();
     names = names || {};
     var rows = recs.filter(function (r) { return r.form_type !== "basic" && (RV_KEYS.some(function (k) { return r[k] != null; }) || r.cva_score != null); });
     if (!rows.length) return emptyMsg("아직 입력된 평가가 없습니다.");
@@ -5020,7 +5028,7 @@ window.hideCalibration = async function() {
       statCard("참가자", n + "명") + statCard("평균 점수", avgScore == null ? "—" : avgScore.toFixed(1)) +
       statCard("레퍼런스", ref ? "입력됨" : "미입력") + '</div>';
     var cw = ref ? ["34%","22%","22%","22%"] : ["50%","50%"];
-    h += '<table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;margin-bottom:16px;border:1px solid #eef0f3;border-radius:10px;overflow:hidden;">' +
+    h += '<table class="wc-rv-t" style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;margin-bottom:16px;border:1px solid #eef0f3;border-radius:10px;overflow:hidden;">' +
       '<thead><tr style="background:#f9fafb;">' + th("항목","left",cw[0]) + th("평균","center",cw[1]) + (ref ? th("레퍼런스","center",cw[2]) + th("편차","center",cw[3]) : "") + '</tr></thead><tbody>';
     RV_KEYS.forEach(function (k, i) {
       var av = attrAvg[i], rv = ref ? num(ref[k]) : null, dev = (av != null && rv != null) ? (av - rv) : null;
@@ -6250,7 +6258,7 @@ window.hideCalibration = async function() {
     if (!v) return "";
     var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
     var d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v); if (isNaN(d)) return "";
-    return (d.getMonth() + 1) + "/" + d.getDate() + " (" + ["일", "월", "화", "수", "목", "금", "토"][d.getDay()] + ")";   /* 10-31: 요일 표기 */
+    return String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + ["일", "월", "화", "수", "목", "금", "토"][d.getDay()] + ")";   /* 10-31: 요일 표기 · 11-03: 날짜 표기 통일 (10.22 (목)) */
   }
   function rkAttr(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function rkPlace(r) {
@@ -8640,7 +8648,7 @@ window.hideCalibration = async function() {
   var CHIP = "display:inline-block;font-size:12.5px;font-weight:600;color:#4e5968;border:1px solid #e5e8eb;border-radius:8px;padding:4px 9px;background:#fff;";
   function notesHTML(c) {
     var K = 'font-size:12px;font-weight:700;color:#8b95a1;', V = 'font-size:22px;font-weight:800;letter-spacing:-.03em;margin-top:4px;color:#191f28;', SM = 'font-size:13px;font-weight:700;color:#8b95a1;margin:0 4px;', SB = 'font-size:12px;color:#8b95a1;margin-top:2px;';
-    var h = '<div style="font-size:13px;font-weight:800;color:#191f28;margin:20px 0 14px;">향미 노트 성장 <span style="font-size:11px;font-weight:600;color:#8b95a1;">· 캘리브레이션 기준 노트와 비교</span></div>';
+    var h = '<div style="font-size:13px;font-weight:800;color:#191f28;margin:20px 0 14px;">향미 노트 성장 <span style="font-size:11px;font-weight:600;color:#8b95a1;">· 레퍼런스 노트와 비교</span></div>';
     var kp = [];
     if (c.pts.length) {
       var k = Math.min(3, Math.max(1, Math.floor(c.pts.length / 2)));
@@ -8649,12 +8657,12 @@ window.hideCalibration = async function() {
       else kp.push('<div><div style="' + K + '">찾은 노트</div><div style="' + V + '">' + c.pts[0].rate + '%</div><div style="' + SB + '">1회</div></div>');
     }
     kp.push('<div><div style="' + K + '">표현 범위</div><div style="' + V + '">' + c.vocab + '<small style="' + SM + '">가지</small></div><div style="' + SB + '">최근 4주 <span style="color:#00b386;font-weight:700;">+' + c.recentNew.length + '</span></div></div>');
-    kp.push('<div><div style="' + K + '">캘리브레이션</div><div style="' + V + '">' + c.pts.length + '<small style="' + SM + '">회</small></div><div style="' + SB + '">' + (c.pts.length ? mdTxt(c.pts[0].at) + ' ~ ' + mdTxt(c.pts[c.pts.length - 1].at) : '기준 노트 있는 기록 없음') + '</div></div>');
+    kp.push('<div><div style="' + K + '">비교한 커핑</div><div style="' + V + '">' + c.pts.length + '<small style="' + SM + '">회</small></div><div style="' + SB + '">' + (c.pts.length ? mdTxt(c.pts[0].at) + ' ~ ' + mdTxt(c.pts[c.pts.length - 1].at) : '기준 노트 있는 기록 없음') + '</div></div>');
     h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;">' + kp.join("") + '</div>';
-    if (c.pts.length >= 2) h += '<div style="border-top:1px solid #f2f4f6;border-bottom:1px solid #f2f4f6;padding:14px 0 6px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;color:#4e5968;margin-bottom:6px;">세션별 찾은 노트 <span style="font-weight:600;color:#8b95a1;">기준 노트 중 짚은 비율</span></div>' + chartSVG(c.pts) + '</div>';
+    if (c.pts.length >= 2) h += '<div style="border-top:1px solid #f2f4f6;border-bottom:1px solid #f2f4f6;padding:14px 0 6px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;color:#4e5968;margin-bottom:6px;">세션별 찾은 노트 <span style="font-weight:600;color:#8b95a1;">레퍼런스 노트 중 짚은 비율</span></div>' + chartSVG(c.pts) + '</div>';
     function grp(t, d, inner, last) { return '<div style="margin-bottom:' + (last ? 0 : 18) + 'px;"><div style="font-size:13px;font-weight:800;color:#191f28;margin-bottom:4px;">' + t + '</div><div style="font-size:12px;color:#8b95a1;margin-bottom:10px;">' + d + '</div>' + inner + '</div>'; }
     var gs = [];
-    if (c.missed.length) gs.push(['계속 놓치는 노트', '기준에 3번 이상 나왔는데 한 번도 못 짚은 노트', '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + c.missed.map(function (m) { return '<span style="' + CHIP + '">' + esc(m.label) + '<b style="font-weight:700;color:#e5484d;margin-left:5px;">0/' + m.n + '</b></span>'; }).join("") + '</div>']);
+    if (c.missed.length) gs.push(['계속 놓치는 노트', '레퍼런스에 3번 이상 나왔는데 한 번도 못 짚은 노트', '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + c.missed.map(function (m) { return '<span style="' + CHIP + '">' + esc(m.label) + '<b style="font-weight:700;color:#e5484d;margin-left:5px;">0/' + m.n + '</b></span>'; }).join("") + '</div>']);
     if (c.late.length) gs.push(['늦게 찾은 노트', '처음엔 놓치다가 짚기 시작한 노트', c.late.map(function (l, i) { return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:8px 0;' + (i < c.late.length - 1 ? 'border-bottom:1px solid #f7f8fa;' : '') + '"><span style="font-weight:700;color:#191f28;">' + esc(l.label) + '</span><span style="color:#8b95a1;font-size:12.5px;">' + l.miss + '번 놓친 뒤 <b style="color:#4e5968;font-weight:700;">' + mdTxt(l.at) + '</b>부터 짚음</span></div>'; }).join("")]);
     if (c.recentNew.length) gs.push(['최근 처음 쓴 노트', '최근 4주 동안 처음 쓴 표현', '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + c.recentNew.slice(0, 14).map(function (s) { return '<span style="' + CHIP + 'color:#00996b;border-color:#c7ead7;">' + esc(s.label) + '</span>'; }).join("") + '</div>']);
     gs.forEach(function (g, i) { h += grp(g[0], g[1], g[2], i === gs.length - 1); });
