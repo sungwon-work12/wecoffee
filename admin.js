@@ -8345,7 +8345,7 @@ window.hideCalibration = async function() {
   /* ═══════════════ 1-2. 성장 현황 > 하위 탭 '커핑 기록' (11-02) ═══════════════
      · 센서리 훈련 커핑만 · 처음엔 목록 한 칸 → 회차를 누르면 그 자리에 회차 화면(← 목록)
      · 회차 화면 = 원두 고르기 + 기존 '참가자 평가 조회' 결과보기(window.wcRenderReview) 그대로
-     · 오른쪽 위 '평가 카드 내보내기' → 카드 창(한 장씩 PNG / 전체 zip) */
+     · 오른쪽 위 '평가 카드로 보기' → 카드 창(크게 보기 · 한 장씩 PNG / 전체 zip) */
   var CR = { loaded: false, busy: false, view: "s", q: "", sess: [], beans: {}, cnt: {}, mode: "list", selS: null, selB: null, seq: 0 };
   async function fetchAll(table, cols) {
     var out = [], step = 1000;
@@ -8504,7 +8504,7 @@ window.hideCalibration = async function() {
     var c = CR.cnt[s.id] || { people: {} };
     D.innerHTML = '<div class="crdh"><button type="button" class="crback" data-crback="1">← 목록</button>' +
       '<span class="crdt">' + esc(s.title || "센서리 훈련 커핑") + '</span><span class="crdm">' + [dateTxt(s.scheduled_at), centerTxt(s.center), "참가 " + Object.keys(c.people).length + "명"].filter(Boolean).join(" · ") + '</span>' +
-      '<button type="button" class="crexp" data-crexp="1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>평가 카드 내보내기</button></div>' +
+      '<button type="button" class="crexp" data-crexp="1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg>평가 카드로 보기</button></div>' +
       '<div class="crpanel"><div class="crbeans">' + beans.map(function (b, i) { var n = Object.keys(bc[b.id] || {}).length; return '<button type="button" class="crbean' + (String(b.id) === String(bid) ? ' on' : '') + '" data-crbean="' + esc(b.id) + '">' + (i + 1) + ". " + esc(b.name) + '<span>' + n + '명</span></button>'; }).join("") + '</div>' +
       '<div id="crRv"><div class="crem">불러오는 중…</div></div></div>';
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
