@@ -5726,7 +5726,7 @@ window.hideCalibration = async function() {
       });
     }
     // ── 역량 성장(센서리·로스팅·추출) — 커핑12 성장 랭킹과 동일 계산(wcGrowthCompute) 재사용. 비동기 주입. ──
-    h += sectionTitle("역량 성장", "20px", "센서리 · 로스팅 · 추출");
+    h += sectionTitle("역량 추이", "20px", "센서리 · 로스팅 · 추출");   // 11-05: 성장 현황 펼침과 같은 이름
     h += '<div id="wcMemNotesSlot"></div>';   // 11-02: 향미 노트 성장 (역량 성장 아래로 옮겨 채움)
     h += '<div id="wcMemGrowth" style="margin-bottom:20px;"><div style="padding:14px;text-align:center;color:#8b95a1;font-size:13px;background:#f9fafb;border-radius:10px;">성장 데이터 불러오는 중…</div></div>';
     // ── 10-31: 로스팅 기록 (커핑 이력 위) ──
@@ -6548,7 +6548,7 @@ window.hideCalibration = async function() {
   }
   function __wcGrowthSectionHTML(m, filter) {
     if (!m) return emptyBox("성장 데이터가 아직 없어요. 커핑 세션·코칭 평가가 3회 이상 쌓이면 표시됩니다.");
-    if (typeof window.wcGrowthDomHTML === "function") return window.wcGrowthDomHTML(m, "__growth");   // 11-05: 성장 현황 펼침과 같은 모양
+    if (typeof window.wcGrowthDomHTML === "function") return window.wcGrowthDomHTML(m, "__growth", { noTitle: 1 });   // 11-05: 성장 현황 펼침과 같은 모양
     filter = filter || "all";
     var doms = m.doms || {}, ent = m.entries || {};
     var chips = __wcGChips(filter);
@@ -6822,15 +6822,15 @@ window.hideCalibration = async function() {
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function avg(a) { return a.length ? a.reduce(function (x, y) { return x + y; }, 0) / a.length : null; }
   function round1(v) { return v == null ? null : Math.round(v * 10) / 10; }
-  /* ── 개선폭: 시간순 포인트를 초기 구간 / 최근 구간으로 나눠 평균차 ──
-     values: 시간 오름차순 숫자 배열. 반환 {improve, early, recent, n} 또는 null(3개 미만) */
+  /* ── 개선폭: 처음 k회 평균 → 최근 k회 평균 (k = min(3, 기록 수의 절반)) ──
+     11-05: 성장 리포트 · 멤버 줄 · 성장 카드와 같은 계산. 반환 {improve, early, recent, n, k} 또는 null(3개 미만) */
   function trend(values) {
     var n = values.length;
     if (n < MIN_PTS) return null;
-    var w = Math.max(1, Math.floor(n / 3));      // 앞/뒤 구간 크기
+    var w = Math.min(3, Math.floor(n / 2));      // 앞/뒤 구간 크기 (겹치지 않음)
     var early = avg(values.slice(0, w));
     var recent = avg(values.slice(n - w));
-    return { improve: recent - early, early: early, recent: recent, n: n };
+    return { improve: recent - early, early: early, recent: recent, n: n, k: w };
   }
   // 센서리 편차(0~15, 낮을수록 정확) → 정확도 점수 0~10
   function devToAcc(dev) { return clamp(10 - Number(dev) * 1.5, 0, 10); }
@@ -6855,7 +6855,7 @@ window.hideCalibration = async function() {
       if (sObj.length >= MIN_PTS) {
         var accSeries = sObj.map(function (r) { return devToAcc(r.dev); });
         var t = trend(accSeries);
-        if (t) doms["센서리"] = { improve: t.improve, level: t.recent, early: t.early, recent: t.recent, n: t.n, src: "객관",
+        if (t) doms["센서리"] = { improve: t.improve, level: t.recent, early: t.early, recent: t.recent, n: t.n, k: t.k, src: "객관",
           series: sObj.map(function (r) { return { v: round1(devToAcc(r.dev)), at: r.at, raw: r.dev }; }) };
       }
       // 코치 점수 역량들 (센서리는 객관 없을 때만)
@@ -6865,7 +6865,7 @@ window.hideCalibration = async function() {
         if (pts.length >= MIN_PTS) {
           var vals = pts.map(function (x) { return Number(x.score); });
           var t2 = trend(vals);
-          if (t2) doms[dom] = { improve: t2.improve, level: t2.recent, early: t2.early, recent: t2.recent, n: t2.n, src: "매니저",
+          if (t2) doms[dom] = { improve: t2.improve, level: t2.recent, early: t2.early, recent: t2.recent, n: t2.n, k: t2.k, src: "매니저",
             series: pts.map(function (x) { return { v: Number(x.score), at: x.at }; }) };
         }
       });
@@ -7009,7 +7009,7 @@ window.hideCalibration = async function() {
         '<span style="flex-shrink:0;">' + spark(d.series, 132, 36) + '</span>' +
         '<span style="flex-shrink:0;">' +
           '<div style="font-size:12.5px;color:#6b7684;font-weight:600;white-space:nowrap;">' + round1(d.early) + ' <span style="color:#b0b8c1;">→</span> <b style="color:#191f28;font-size:14px;">' + round1(d.recent) + '</b></div>' +
-          '<div style="font-size:12.5px;font-weight:800;color:' + impColor(d.improve) + ';margin-top:2px;white-space:nowrap;">' + impArrow(d.improve) + ' ' + signed(d.improve) + ' <span style="font-size:11px;color:#8b95a1;font-weight:600;">· ' + d.n + '회</span></div>' +
+          '<div style="font-size:12.5px;font-weight:800;color:' + impColor(d.improve) + ';margin-top:2px;white-space:nowrap;">' + impArrow(d.improve) + ' ' + signed(d.improve) + ' <span style="font-size:11px;color:#8b95a1;font-weight:600;">· ' + (d.k ? '처음·최근 ' + d.k + '회씩 · 총 ' : '') + d.n + '회</span></div>' +
         '</span></div>';
     } else {
       head = '<div class="wcgr-dom-h">' + label() +
@@ -7058,7 +7058,7 @@ window.hideCalibration = async function() {
         '<div class="wcgr-grid">' +
           '<div class="wcgr-main">' +
             '<div class="wcgr-sec"><div class="wcgr-sec-t">역량 추이</div>' + detail +
-              '<div style="margin-top:12px;font-size:11.5px;color:#8b95a1;line-height:1.6;">개선폭 = 최근 − 초기 구간 평균 · 3회↑만 반영 · <span style="color:#3182f6;font-weight:700;">객관</span> 커핑 편차 · <span style="color:#ff7900;font-weight:700;">매니저</span> 평가 점수</div></div>' +
+              '<div style="margin-top:12px;font-size:11.5px;color:#8b95a1;line-height:1.6;">개선폭 = 최근 3회 평균 − 처음 3회 평균 (6회 미만이면 반씩) · 3회↑만 반영 · <span style="color:#3182f6;font-weight:700;">객관</span> 커핑 편차 · <span style="color:#ff7900;font-weight:700;">매니저</span> 평가 점수</div></div>' +
             '<div class="wcgr-notes" data-notesph="' + esc(m.phone) + '"></div>' +   // 11-02: 향미 노트 성장
             '<div class="wcgr-hist-main"></div>' +
           '</div>' +
@@ -7067,11 +7067,11 @@ window.hideCalibration = async function() {
       '</div></div>';
   }
   /* 11-05: 멤버 상세 '역량 추이'도 성장 현황 펼침과 같은 모양으로 */
-  window.wcGrowthDomHTML = function (m, scope) {
+  window.wcGrowthDomHTML = function (m, scope, opt) {
     ensureStyle();
     var doms = (m && m.doms) || {}, ent = (m && m.entries) || {};
-    return '<div class="wcgr-sec wcgr-sec-md"><div class="wcgr-sec-t">역량 추이</div>' + DOMAINS.map(function (dom) { return domRow(dom, doms[dom], ent[dom], scope); }).join("") +
-      '<div style="margin-top:12px;font-size:11.5px;color:#8b95a1;line-height:1.6;">개선폭 = 최근 − 초기 구간 평균 · 3회↑만 반영 · <span style="color:#3182f6;font-weight:700;">객관</span> 커핑 편차 · <span style="color:#ff7900;font-weight:700;">매니저</span> 평가 점수</div></div>';
+    return '<div class="wcgr-sec wcgr-sec-md">' + (opt && opt.noTitle ? '' : '<div class="wcgr-sec-t">역량 추이</div>') + DOMAINS.map(function (dom) { return domRow(dom, doms[dom], ent[dom], scope); }).join("") +
+      '<div style="margin-top:12px;font-size:11.5px;color:#8b95a1;line-height:1.6;">개선폭 = 최근 3회 평균 − 처음 3회 평균 (6회 미만이면 반씩) · 3회↑만 반영 · <span style="color:#3182f6;font-weight:700;">객관</span> 커핑 편차 · <span style="color:#ff7900;font-weight:700;">매니저</span> 평가 점수</div></div>';
   };
   function skillQualifies(m) { return _skillFilter === "all" ? m.enough : !!(m.doms && m.doms[_skillFilter]); }
   function sortVal(m) { return _skillFilter === "all" ? (m.score == null ? -1e9 : m.score) : (m.doms[_skillFilter] ? m.doms[_skillFilter].improve : -1e9); }
@@ -7113,10 +7113,10 @@ window.hideCalibration = async function() {
     if (_staleOnly) pool = pool.filter(function (m) { return isStale(m.phone); });
     if (XMODES[_sortMode]) {   // 11-05: 레퍼런스 컵노트 적중 · 센서리 정확도 · 역량 점수 · 해결된 코칭
       var X = window.wcGrowthExtra, XM = XMODES[_sortMode], ready = !!(X && X.get("") !== null);
-      var xv = function (m) { var x = X.get(m.phone) || {}; if (XM.long && !(x.span >= 56 * 864e5)) return null; return XM.val(x); };
+      var xv = function (m) { var x = X.get(m.phone) || {}; if (XM.long && !(XM.n(x) >= 3)) return null; return XM.val(x); };
       var hx = filterBarHTML() + filterRow2HTML(base, staleN) +
         '<div style="font-size:14px;font-weight:700;color:#4e5968;margin-bottom:5px;line-height:1.5;"><b style="color:#ff7900;">' + XM.t + '</b> ' + XM.tail + '</div>' +
-        '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">' + XM.sub + '</div>';
+        '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">' + XM.sub + ruleBtn() + '</div>' + ruleBox();
       if (!ready) return hx + '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">불러오는 중…</div>';
       var qx = pool.filter(function (m) { return xv(m) != null; }).sort(function (a, b) { return xv(b) - xv(a); });
       if (!qx.length) hx += '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">' + XM.empty + '</div>';
@@ -7142,7 +7142,7 @@ window.hideCalibration = async function() {
       : ('<b style="color:#ff7900;">' + _skillFilter + '</b> 개선폭 순으로 정렬했어요.');
     var h = filterBarHTML() + filterRow2HTML(base, staleN) +
       '<div style="font-size:14px;font-weight:700;color:#4e5968;margin-bottom:5px;line-height:1.5;">' + intro + '</div>' +
-      '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">역량별 3회 이상 평가된 멤버만 · 센서리는 커핑 편차(정확도), 로스팅·추출은 교육 매니저 점수</div>';
+      '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">역량별 3회 이상 평가된 멤버만 · 처음 3회 → 최근 3회 · 센서리는 커핑 편차(정확도), 로스팅·추출은 교육 매니저 점수' + ruleBtn() + '</div>' + ruleBox();
     if (!qual.length) h += '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">여기 조건에 맞는 멤버가 아직 없어요. 세션마다 역량·점수를 남기면 3회부터 잡혀요.</div>';
     else { var r = 0; h += qual.map(function (m) { r++; return memberCard(m, r); }).join(""); }
     // 데이터 부족 멤버: 풀카드 대신 접이식 이름 칩(무한 스크롤 방지). 기본 접힘.
@@ -7292,17 +7292,20 @@ window.hideCalibration = async function() {
     window.wcNoteBulk().then(function (m) { window.__wcNoteSum = m || {}; paintChk(); }, function () { window.__wcNoteSum = {}; paintChk(); });
   }
   /* 11-05: 첫 4주 → 마지막 4주 한 줄 (커핑 14 · wcGrowthExtra) — 좋아지면 초록, 그대로·나빠지면 회색 */
-  var XLONG = '기록이 8주 이상인 멤버만';
+  var XLONG = '기록이 3회 이상인 멤버만';
   var XMODES = {
-    h: { t: "레퍼런스 컵노트 적중", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "첫 4주와 마지막 4주를 비교해요 · " + XLONG, long: 1, empty: "비교할 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 레퍼런스 컵노트 기록이 없는 멤버",
+    h: { t: "레퍼런스 컵노트 적중", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "처음 3회와 최근 3회를 비교해요 · " + XLONG, long: 1, n: function (x) { return (x.hit && x.hit.n) || 0; }, empty: "비교할 기록이 쌓인 멤버가 아직 없어요.", left: "레퍼런스 컵노트 기록이 3회보다 적은 멤버",
       val: function (x) { var k = x.hit; return (k && k.e != null && k.r != null) ? k.r - k.e : null; } },
-    s: { t: "센서리 정확도", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "첫 4주와 마지막 4주의 센서리 편차를 비교해요 · 편차가 줄어든 만큼 위로 · " + XLONG, long: 1, empty: "비교할 센서리 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 센서리 기록이 없는 멤버",
+    s: { t: "센서리 정확도", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "처음 3회와 최근 3회의 센서리 편차를 비교해요 · 편차가 줄어든 만큼 위로 · " + XLONG, long: 1, n: function (x) { return (x.sens && x.sens.n) || 0; }, empty: "비교할 센서리 기록이 쌓인 멤버가 아직 없어요.", left: "센서리 기록이 3회보다 적은 멤버",
       val: function (x) { var k = x.sens; return (k && k.e != null && k.r != null) ? k.e - k.r : null; } },
-    k: { t: "역량 점수", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "첫 4주와 마지막 4주의 교육 매니저 점수를 비교해요 · 가장 많이 오른 역량 기준 · " + XLONG, long: 1, empty: "비교할 역량 점수가 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 두 구간 모두에 점수가 없는 멤버",
+    k: { t: "역량 점수", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "처음 3회와 최근 3회의 교육 매니저 점수를 비교해요 · 가장 많이 오른 역량 기준 · " + XLONG, long: 1, n: function (x) { return (x.sc && x.sc.n) || 0; }, empty: "비교할 역량 점수가 쌓인 멤버가 아직 없어요.", left: "역량 점수가 3회보다 적은 멤버",
       val: function (x) { return x.sc ? x.sc.imp : null; } },
     r: { t: "해결된 코칭", tail: "이 많은 순으로 정렬했어요.", sub: "코칭 코멘트에 '해결됨'을 표시한 건수예요", long: 0, empty: "아직 해결된 코칭이 없어요. 코멘트에서 '해결됨'을 누르면 여기 잡혀요.", left: "해결된 코칭이 없는 멤버",
       val: function (x) { return x.res || null; } }
   };
+  var _ruleOpen = false;
+  function ruleBtn() { return window.wcGrowthRuleHTML ? ' <button type="button" class="wcgr-rule-b" data-grrule="1">계산 기준</button>' : ''; }
+  function ruleBox() { return window.wcGrowthRuleHTML ? '<div class="wcgr-rule"' + (_ruleOpen ? '' : ' hidden') + '>' + window.wcGrowthRuleHTML() + '</div>' : ''; }
   function xr1(v) { return Math.round(v * 10) / 10; }
   function xmd(t) { var d = new Date(t), W = ["일", "월", "화", "수", "목", "금", "토"]; return String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + W[d.getDay()] + ")"; }
   function exLineHTML(ph) {
@@ -7739,13 +7742,14 @@ window.hideCalibration = async function() {
       ".wcgr-act b{font-weight:700;color:#4e5968;}.wcgr-act b.ok{color:#00b386;}.wcgr-act b.mid{color:#ea6f00;}.wcgr-act b.low{color:#e5484d;}" +
       ".wcgr-act .sep{color:#d1d6db;margin:0 7px;}.wcgr-act .m{color:#b0b8c1;font-weight:500;}" +
       ".wcgr-ex{font-size:12.5px;color:#8b95a1;margin-top:4px;line-height:1.7;}.wcgr-ex .it{white-space:nowrap;}.wcgr-ex b{font-weight:700;color:#4e5968;}.wcgr-ex b.up{color:#00b386;font-weight:800;}.wcgr-ex b.dn{color:#8b95a1;}.wcgr-ex .sep{color:#d1d6db;margin:0 7px;}.wcgr-ex .m{color:#b0b8c1;font-weight:500;}" +
+      ".wcgr-rule-b{border:none;background:none;padding:0;margin-left:6px;font-family:inherit;font-size:12.5px;font-weight:700;color:#ea6f00;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}.wcgr-rule{border:1px solid #e5e8eb;border-radius:14px;padding:14px 16px;margin:-6px 0 16px;background:#fff;}.wcgr-rule .wrp-dl{margin:0;display:grid;grid-template-columns:170px 1fr;gap:9px 14px;font-size:12.5px;line-height:1.6;}.wcgr-rule .wrp-dl dt{font-weight:800;color:#191f28;}.wcgr-rule .wrp-dl dd{margin:0;color:#4e5968;}.wcgr-rule .wrp-dl b{color:#191f28;}" +
       ".wcgr-gc{height:32px;padding:0 12px;border:1px solid #ff7900;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;}" +   /* 11-05 */
       ".wcgr-chk{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 4px 4px 37px;}" +
       ".wcgr-chk .cbtn{height:34px;padding:0 14px;border:1px solid #ffd7b5;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}" +
       ".wcgr-chk .cbtn:disabled{opacity:.5;cursor:default;}" +
       ".wcgr-chk .done{font-size:13px;font-weight:700;color:#00b386;}" +
       ".wcgr-chk .undo{border:none;background:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:#8b95a1;cursor:pointer;text-decoration:underline;}" +
-      "@media (max-width:720px){.wcgr-row2{gap:14px;}.wcgr-grp{flex-direction:column;align-items:flex-start;gap:6px;}.wcgr-chips{flex-wrap:wrap;}.wcgr-chip{padding:0 8px;}.wcgr-act{white-space:normal;}.wcgr-act .it{white-space:nowrap;}#wcGrowthSort{margin-left:0!important;}.wcgr-ex{overflow:hidden;word-break:keep-all;}.wcgr-ex .it{white-space:normal;}.wcgr-gc{height:28px;padding:0 8px;font-size:11.5px;}}";
+      "@media (max-width:720px){.wcgr-row2{gap:14px;}.wcgr-grp{flex-direction:column;align-items:flex-start;gap:6px;}.wcgr-chips{flex-wrap:wrap;}.wcgr-chip{padding:0 8px;}.wcgr-act{white-space:normal;}.wcgr-act .it{white-space:nowrap;}#wcGrowthSort{margin-left:0!important;}.wcgr-ex{overflow:hidden;word-break:keep-all;}.wcgr-rule .wrp-dl{grid-template-columns:1fr;gap:2px;}.wcgr-rule .wrp-dl dd{margin-bottom:8px;}.wcgr-ex .it{white-space:normal;}.wcgr-gc{height:28px;padding:0 8px;font-size:11.5px;}}";
     document.head.appendChild(st);
   }
   function ensureStyle() {
@@ -7794,6 +7798,8 @@ window.hideCalibration = async function() {
       if (more) { histMore(more); return; }
       var hop = e.target.closest && e.target.closest("[data-histopen]");
       if (hop) { histOpen(hop); return; }
+      var grr = e.target.closest && e.target.closest("[data-grrule]");   // 11-05: 계산 기준
+      if (grr) { _ruleOpen = !_ruleOpen; var rbx = p.querySelector(".wcgr-rule"); if (rbx) rbx.hidden = !_ruleOpen; return; }
       var gcb = e.target.closest && e.target.closest("[data-gcph]");   // 11-05: 줄 끝 '성장 카드'
       if (gcb) { if (window.wcGcOpen) window.wcGcOpen(gcb.getAttribute("data-gcph"), gcb.getAttribute("data-gcnm")); return; }
       var head = e.target.closest && e.target.closest(".wcgr-head"); if (!head) return;
@@ -8972,11 +8978,20 @@ window.hideCalibration = async function() {
       var d = new Date(now), a = new Date(d.getFullYear(), d.getMonth(), 1).getTime(), pa = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
       return { e0: pa, e1: a, r0: a, r1: now + 1, eLbl: "지난달", rLbl: "이번 달" };
     }
-    tl = tl || now;   // 11-05: 마지막 4주 = 그 멤버의 마지막 기록부터 거꾸로 4주
-    return { e0: t0, e1: t0 + WIN, r0: tl - WIN + 1, r1: tl + 1, eLbl: "첫 4주", rLbl: "마지막 4주" };
+    return { kind: "n", eLbl: "처음", rLbl: "최근" };   // 11-05: 처음 3회 → 최근 3회 (6회 미만이면 반씩) — 성장 현황 성장순과 같은 계산
   }
+  function splitK(n) { return n < 2 ? 0 : Math.min(3, Math.floor(n / 2)); }
+  window.wcSplitK = splitK;
   function inWin(pts, a, b) { var l = pts.filter(function (p) { return p.at >= a && p.at < b; }); return { v: avg(l.map(function (p) { return p.v; })), n: l.length }; }
-  function cmp(pts, w) { var e = inWin(pts, w.e0, w.e1), r = inWin(pts, w.r0, w.r1); return { e: e.v, r: r.v, n: pts.length, ne: e.n, nr: r.n }; }
+  function cmp(pts, w) {
+    if (w.kind === "n") {
+      var p = pts.slice().sort(function (a, b) { return a.at - b.at; }), n = p.length, k = splitK(n);
+      if (!k) return { e: null, r: null, n: n, one: n === 1 ? p[0].v : null, ne: 0, nr: 0 };
+      var E = p.slice(0, k), R = p.slice(n - k), vv = function (l) { return avg(l.map(function (x) { return x.v; })); };
+      return { e: vv(E), r: vv(R), n: n, ne: k, nr: k, k: k, ea: E[0].at, eb: E[k - 1].at, ra: R[0].at, rb: R[k - 1].at };
+    }
+    var e = inWin(pts, w.e0, w.e1), r = inWin(pts, w.r0, w.r1); return { e: e.v, r: r.v, n: pts.length, ne: e.n, nr: r.n };
+  }
   function devToAcc(v) { return Math.max(0, Math.min(10, 10 - Number(v) * 1.5)); }   // 성장 현황과 같은 환산(편차 → 정확도 10점)
 
   /* ── 멤버 한 명의 성장 데이터 ── */
@@ -9003,7 +9018,7 @@ window.hideCalibration = async function() {
   }
   function bestScore(score, w) {
     var best = null;
-    Object.keys(score).forEach(function (dom) { var k = cmp(score[dom], w); if (k.e == null || k.r == null) return; var imp = k.r - k.e; if (!best || imp > best.imp) best = { dom: dom, e: k.e, r: k.r, imp: imp, ne: k.ne, nr: k.nr }; });
+    Object.keys(score).forEach(function (dom) { var k = cmp(score[dom], w); if (k.e == null || k.r == null) return; var imp = k.r - k.e; if (!best || imp > best.imp) best = { dom: dom, e: k.e, r: k.r, imp: imp, ne: k.ne, nr: k.nr, n: k.n, k: k.k, ea: k.ea, eb: k.eb, ra: k.ra, rb: k.rb }; });
     return best;
   }
   /* 해결된 코칭: 원래 코멘트 → (예약 코멘트면) 같은 생두 로스팅·커핑 횟수 → 해결 */
@@ -9075,6 +9090,11 @@ window.hideCalibration = async function() {
       ".wrp-m{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;}",
       ".wrp-per{font-size:12px;color:#8b95a1;margin:-4px 0 12px;line-height:1.6;}",
       ".wrp-c .c{font-size:11.5px;color:#b0b8c1;font-weight:600;}",
+      ".wrp-c .p{font-size:11.5px;color:#8b95a1;margin-top:5px;}",
+      ".wrp-rule-b{border:none;background:none;padding:0;margin-left:6px;font-family:inherit;font-size:12px;font-weight:700;color:#e86d00;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}",
+      ".wrp-rule{border:1px solid #e5e8eb;border-radius:14px;padding:14px 16px;margin:-2px 0 14px;background:#fff;}",
+      ".wrp-dl{margin:0;display:grid;grid-template-columns:150px 1fr;gap:9px 14px;font-size:12.5px;line-height:1.6;}.wrp-dl dt{font-weight:800;color:#191f28;}.wrp-dl dd{margin:0;color:#4e5968;}.wrp-dl b{color:#191f28;}",
+      "@media (max-width:560px){.wrp-dl{grid-template-columns:1fr;gap:2px;}.wrp-dl dd{margin-bottom:8px;}}",
       ".wrp-grp{margin-bottom:14px;}.wrp-grp:last-child{margin-bottom:0;}.wrp-grp b{display:block;font-size:13px;font-weight:800;color:#191f28;margin-bottom:2px;}.wrp-grp small{display:block;font-size:12px;color:#8b95a1;margin-bottom:8px;}",
       ".wrp-cps{display:flex;flex-wrap:wrap;gap:6px;}.wrp-cp{border:1px solid #e5e8eb;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:600;color:#191f28;}.wrp-cp i{font-style:normal;color:#8b95a1;margin-left:4px;font-weight:500;}.wrp-cp.g{color:#00996b;border-color:#c7ead7;}",
       ".wrp-c{border:1px solid #e5e8eb;border-radius:14px;padding:14px 16px;background:#fff;min-width:0;}",
@@ -9108,9 +9128,12 @@ window.hideCalibration = async function() {
   function metricCard(label, k, opt) {
     opt = opt || {};
     var f = opt.fmt || function (v) { return String(r1(v)); }, w = opt.w || {};
-    var cn = function (n) { return opt.noCnt ? "" : '<span class="c">(' + (n || 0) + '회)</span>'; };
+    var nk2 = w.kind === "n";
+    var cn = function (n) { return (opt.noCnt || nk2) ? "" : '<span class="c">(' + (n || 0) + '회)</span>'; };
     var sub = opt.sub ? '<div class="s">' + opt.sub + '</div>' : '';
-    if (k.e == null && k.r == null) return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="em">아직 기록이 없어요</div>' + (k.n ? '' : '') + '</div>';
+    var per = (nk2 && k.k && !opt.noCnt) ? '<div class="p">처음 ' + k.k + '회 ' + md2(k.ea, k.eb) + ' → 최근 ' + k.k + '회 ' + md2(k.ra, k.rb) + '</div>' : '';
+    if (nk2 && k.one != null) return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="v"><span class="b">' + f(k.one) + '</span></div><div class="s">기록 1회 · 2회부터 비교해요</div></div>';
+    if (k.e == null && k.r == null) return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="em">아직 기록이 없어요</div></div>';
     if (k.e == null || k.r == null) {
       var miss = k.e == null ? w.eLbl : w.rLbl;
       return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="v"><span class="a">' + (k.e == null ? '—' : f(k.e)) + '</span>' + (k.e == null ? '' : cn(k.ne)) + '<span class="ar">→</span><span class="b">' + (k.r == null ? '—' : f(k.r)) + '</span>' + (k.r == null ? '' : cn(k.nr)) + '</div><div class="s">' + esc((miss || "한 구간") + " 기록이 없어요") + '</div></div>';
@@ -9118,21 +9141,27 @@ window.hideCalibration = async function() {
     var diff = k.r - k.e, good = opt.lower ? diff < 0 : diff > 0;
     var dt = (diff > 0 ? "+" : "") + (opt.dfmt ? opt.dfmt(diff) : r1(diff));
     return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="v"><span class="a">' + f(k.e) + '</span>' + cn(k.ne) + '<span class="ar">→</span><span class="b">' + f(k.r) + '</span>' + cn(k.nr) + '</div>' +
-      '<div class="d' + (good ? "" : " n") + '">' + esc(dt) + '</div>' + sub + '</div>';
+      '<div class="d' + (good ? "" : " n") + '">' + esc(dt) + '</div>' + per + sub + '</div>';
   }
-  function vocabOf(g, w) {   // 표현 범위: 지금까지 쓴 노트 표현 · 비교 뒤 구간에 처음 쓴 것
+  function md2(a, b) { return (a === b || tick(a) === tick(b)) ? tick(a) : tick(a) + "~" + tick(b); }
+  function vocabOf(g, w) {   // 표현 범위: 지금까지 쓴 노트 표현 · 비교 뒤 구간(최근 k회 커핑 / 이번 달)에 처음 쓴 것
     var seen = {};
+    if (w.kind === "n") {
+      var sat = {}; ((g.c && g.c.recs) || []).forEach(function (x) { if (x.sid != null && (sat[x.sid] == null || x.at < sat[x.sid])) sat[x.sid] = x.at; });
+      var ats = Object.keys(sat).map(function (k) { return sat[k]; }).sort(function (a, b) { return a - b; }), kk = splitK(ats.length);
+      w = { r0: kk ? ats[ats.length - kk] : Infinity, r1: Infinity, rLbl: "최근 " + kk + "회 커핑", k: kk };
+    }
     ((g.c && g.c.recs) || []).forEach(function (x) { (x.notes || []).forEach(function (n) { var k = nk(n); if (k && (!seen[k] || x.at < seen[k].at)) seen[k] = { label: n, at: x.at }; }); });
     var all = Object.keys(seen).map(function (k) { return seen[k]; }).filter(function (s) { return s.at < w.r1; });
     var before = all.filter(function (s) { return s.at < w.r0; }).length;
     var fresh = all.filter(function (s) { return s.at >= w.r0; }).sort(function (a, b) { return b.at - a.at; });
-    return { total: all.length, before: before, fresh: fresh };
+    return { total: all.length, before: before, fresh: fresh, lbl: w.rLbl };
   }
   function noteGroupsHTML(g, w) {
     var c = g.c || {}, vb = vocabOf(g, w), CH = function (t, sub, cls) { return '<span class="wrp-cp' + (cls ? " " + cls : "") + '">' + esc(t) + (sub ? '<i>' + esc(sub) + '</i>' : '') + '</span>'; }, gs = [];
     if ((c.missed || []).length) gs.push(['계속 놓치는 노트', '레퍼런스에 3번 이상 나왔는데 한 번도 못 짚은 노트', c.missed.map(function (m) { return CH(m.label, m.n + "번"); }).join("")]);
     if ((c.late || []).length) gs.push(['늦게 찾은 노트', '처음엔 놓치다가 짚기 시작한 노트', c.late.map(function (l) { return CH(l.label, mdw(l.at)); }).join("")]);
-    if (vb.fresh.length) gs.push(['최근 처음 쓴 노트', w.rLbl + ' 동안 처음 쓴 표현', vb.fresh.slice(0, 14).map(function (x) { return CH(x.label, "", "g"); }).join("")]);
+    if (vb.fresh.length) gs.push(['최근 처음 쓴 노트', vb.lbl + ' 동안 처음 쓴 표현', vb.fresh.slice(0, 14).map(function (x) { return CH(x.label, "", "g"); }).join("")]);
     if (!gs.length) return "";
     return '<div class="wrp-t"><b>향미 노트</b><span>레퍼런스 컵노트와 비교</span></div><div class="wrp-box">' + gs.map(function (x) { return '<div class="wrp-grp"><b>' + x[0] + '</b><small>' + x[1] + '</small><div class="wrp-cps">' + x[2] + '</div></div>'; }).join("") + '</div>';
   }
@@ -9163,12 +9192,12 @@ window.hideCalibration = async function() {
   function paintReport(el, g, name) {
     var mode = _repMode[g.phone] || "j", now = Date.now(), w = windows(mode, g.t0, now, g.t1);
     var noData = !g.hit.length && !g.sens.length && !g.cnt.length && !Object.keys(g.score).length;
-    var h = '<div class="wrp-h"><b>성장 리포트</b><div class="wrp-chips"><button type="button" class="wrp-chip' + (mode === "j" ? " on" : "") + '" data-wrpm="j">첫 4주 → 마지막 4주</button><button type="button" class="wrp-chip' + (mode === "m" ? " on" : "") + '" data-wrpm="m">지난달 → 이번 달</button></div></div>';
+    var h = '<div class="wrp-h"><b>성장 리포트</b><div class="wrp-chips"><button type="button" class="wrp-chip' + (mode === "j" ? " on" : "") + '" data-wrpm="j">처음 3회 → 최근 3회</button><button type="button" class="wrp-chip' + (mode === "m" ? " on" : "") + '" data-wrpm="m">지난달 → 이번 달</button></div></div>';
     if (noData) { el.innerHTML = h + '<div class="wrp-box"><div class="wrp-em">커핑·코칭 기록이 쌓이면 여기서 성장을 비교해 볼 수 있어요.</div></div>'; return; }
     var per = mode === "j"
-      ? "첫 4주 " + mdw(w.e0) + " ~ " + mdw(w.e1 - DAY) + " · 마지막 4주 " + mdw(w.r0) + " ~ " + mdw(w.r1 - 1) + " · 마지막 기록 기준" + (w.r0 < w.e1 ? " · 기록이 8주보다 짧아서 두 구간이 겹쳐요" : "")
-      : "지난달 " + mdw(w.e0) + " ~ " + mdw(w.e1 - DAY) + " · 이번 달 " + mdw(w.r0) + " ~ 오늘";
-    h += '<div class="wrp-per">' + esc(per) + '</div>';
+      ? "지표마다 처음 3회 평균 → 최근 3회 평균 · 기록이 6회보다 적으면 반씩 나눠 비교해요"
+      : "지난달 " + mdw(w.e0) + " ~ " + mdw(w.e1 - DAY) + " · 이번 달 " + mdw(w.r0) + " ~ 오늘 · 그 달의 기록 평균";
+    h += '<div class="wrp-per">' + esc(per) + ' <button type="button" class="wrp-rule-b" data-wrp-rule>계산 기준</button></div><div class="wrp-rule" hidden>' + window.wcGrowthRuleHTML() + '</div>';
     var sc = bestScore(g.score, w), sk = cmp(g.sens, w), vb = vocabOf(g, w);
     var resN = g.notes.filter(function (n) { var t = ts(n.resolved_at); return t && (mode === "j" || (t >= w.r0 && t < w.r1)); });
     var resDom = {}; resN.forEach(function (n) { var k = n.eval_domain || "기타"; resDom[k] = (resDom[k] || 0) + 1; });
@@ -9176,9 +9205,9 @@ window.hideCalibration = async function() {
       metricCard("레퍼런스 컵노트 중 짚은 비율", cmp(g.hit, w), { w: w, fmt: function (v) { return Math.round(v) + "%"; }, dfmt: function (d) { return Math.round(d) + "%p"; }, sub: "커핑 " + g.hit.length + "회 기준" }) +
       metricCard("센서리 정확도", cmp(g.acc, w), { w: w, sub: (sk.e != null && sk.r != null) ? "편차 " + r1(sk.e) + " → " + r1(sk.r) + " · 레퍼런스 점수와의 차이" + (sk.r < sk.e ? "가 줄었어요" : "") : "10점 만점 · 커핑 편차로 계산" }) +
       (sc ? metricCard("역량 점수 · " + sc.dom, { e: sc.e, r: sc.r, n: 1, ne: sc.ne, nr: sc.nr }, { w: w, sub: "교육 매니저 성장 평가 · 10점 만점" })
-          : '<div class="wrp-c"><div class="l">역량 점수</div><div class="em">' + (Object.keys(g.score).length ? '두 구간 모두에 교육 매니저 점수가 있어야 비교돼요' : '아직 교육 매니저 점수가 없어요') + '</div></div>') +
+          : '<div class="wrp-c"><div class="l">역량 점수</div><div class="em">' + (Object.keys(g.score).length ? (mode === "j" ? '교육 매니저 점수가 2회 이상 있어야 비교돼요' : '두 달 모두에 교육 매니저 점수가 있어야 비교돼요') : '아직 교육 매니저 점수가 없어요') + '</div></div>') +
       metricCard("한 컵에 적은 노트 수", cmp(g.cnt, w), { w: w, fmt: function (v) { return r1(v) + "개"; }, dfmt: function (d) { return r1(d) + "개"; }, sub: "평균" }) +
-      (vb.total ? metricCard("표현 범위", { e: vb.before, r: vb.total, n: 1 }, { w: w, noCnt: 1, fmt: function (v) { return v + "가지"; }, dfmt: function (d) { return String(d); }, sub: "지금까지 쓴 노트 표현 · " + w.rLbl + "에 새로 쓴 것" })
+      (vb.total ? metricCard("표현 범위", { e: vb.before, r: vb.total, n: 2 }, { w: w, noCnt: 1, fmt: function (v) { return v + "가지"; }, dfmt: function (d) { return String(d); }, sub: "지금까지 쓴 노트 표현 · " + vb.lbl + "에 새로 쓴 것" })
           : '<div class="wrp-c"><div class="l">표현 범위</div><div class="em">아직 기록이 없어요</div></div>') +
       '<div class="wrp-c"><div class="l">해결된 코칭</div><div class="v"><span class="b">' + resN.length + '건</span></div><div class="s">' + (resN.length ? esc(Object.keys(resDom).map(function (k) { return k + " " + resDom[k] + "건"; }).join(" · ")) : (mode === "m" ? "이번 달 해결된 코칭이 없어요" : "코멘트에 '해결됨'을 누르면 잡혀요")) + '</div></div>' +
       '</div>';
@@ -9196,7 +9225,8 @@ window.hideCalibration = async function() {
     el.onclick = function (e) {
       var m = e.target.closest("[data-wrpm]");
       if (m) { _repMode[digits(phone)] = m.getAttribute("data-wrpm"); var g0 = _rep[digits(phone)]; if (g0) paintReport(el, g0, name); return; }
-      if (e.target.closest("[data-wrp-card]")) { window.wcGcOpen(digits(phone), name); }
+      if (e.target.closest("[data-wrp-card]")) { window.wcGcOpen(digits(phone), name); return; }
+      if (e.target.closest("[data-wrp-rule]")) { var rb0 = el.querySelector(".wrp-rule"); if (rb0) rb0.hidden = !rb0.hidden; }
     };
     try {
       var g = await gather(phone); g.name = name;
@@ -9206,6 +9236,21 @@ window.hideCalibration = async function() {
       if (!document.body.contains(el)) return;
       var rb = el.querySelector("[data-wrp-res]"); if (rb) rb.innerHTML = resolvedHTML(g.resolved);
     } catch (e) { console.warn("[성장 리포트] 불러오기 실패", e); if (document.body.contains(el)) el.innerHTML = ""; }
+  };
+  /* 11-05: 계산 기준 — 성장 리포트 · 성장 현황에서 같이 씀 */
+  window.wcGrowthRuleHTML = function () {
+    var R = [
+      ["비교 방식", "지표마다 <b>처음 3회 평균 → 최근 3회 평균</b>을 비교해요. 기록이 6회보다 적으면 반씩 나눠요(4회면 2회씩, 3회면 1회씩). 1회뿐이면 비교하지 않아요. '지난달 → 이번 달'은 그 달 기록의 평균이에요."],
+      ["레퍼런스 컵노트 중 짚은 비율", "커핑 1회마다 레퍼런스 컵노트 가운데 멤버가 적은 노트의 비율이에요."],
+      ["센서리 정확도", "<b>10 − 편차 × 1.5</b> (0~10점). 편차는 멤버 점수와 레퍼런스 점수의 차이라서, 편차가 줄면 정확도가 올라가요."],
+      ["역량 점수", "교육 매니저가 코멘트에 남긴 10점 만점 점수예요. 여러 역량 중 가장 많이 오른 역량을 보여 줘요."],
+      ["한 컵에 적은 노트 수", "커핑 1회에서 원두 한 컵마다 적은 노트 수의 평균이에요."],
+      ["표현 범위", "지금까지 쓴 노트 표현의 가짓수예요. 옆 숫자는 최근 구간에 처음 쓴 표현 수예요."],
+      ["해결된 코칭", "코칭 코멘트에 '해결됨'을 표시한 건수예요."],
+      ["성장순", "센서리 · 로스팅 · 추출 역량별 개선폭(최근 − 처음)의 평균이에요. 역량별로 3회 이상 기록이 있어야 순위에 들어가요. 센서리는 커핑 편차, 로스팅·추출은 교육 매니저 점수예요."],
+      ["색", "<b style=\"color:#00b386\">초록</b>은 좋아진 쪽이에요. 성장 리포트와 멤버 줄 아래 한 줄에서는 그대로이거나 나빠지면 회색, 역량 추이와 종합 성장에서는 나빠지면 <b style=\"color:#e5484d\">빨강</b>이에요. 센서리 편차는 줄어야 좋아진 거예요."]
+    ];
+    return '<dl class="wrp-dl">' + R.map(function (x) { return '<dt>' + x[0] + '</dt><dd>' + x[1] + '</dd>'; }).join("") + '</dl>';
   };
   window.wcReportRefresh = function (phone) {
     var ph = digits(phone), els = document.querySelectorAll('.wcRepHost[data-phone="' + ph + '"]'); if (!els.length) return;
