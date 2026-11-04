@@ -6044,6 +6044,7 @@ window.hideCalibration = async function() {
         if (typeof showToast === "function") showToast(on ? "해결됨으로 표시했어요." : "해결됨을 해제했어요.");
         await cnAfterChange(scope, phone, sessionId, beanId, refId);
         try { if (window.wcReportRefresh) window.wcReportRefresh(phone); } catch (e2) {}
+        try { if (window.wcGrowthExtra) window.wcGrowthExtra.reset(); } catch (e4) {}
       } catch (e) {
         console.warn("[coach] 해결 표시 실패", e);
         try { var sv = btn.closest(".cnItem") && btn.closest(".cnItem").querySelector(".cnRs"); if (sv) sv.disabled = false; } catch (e3) {}
@@ -7019,7 +7020,7 @@ window.hideCalibration = async function() {
           : '아직 교육 매니저 코멘트가 없어요.') + '</div>';
     return '<div class="wcgr-dom">' + head + '<div class="wcgr-cmts">' + comments + '</div></div>';
   }
-  function memberCard(m, rank, noRank) {
+  function memberCard(m, rank, noRank, forceRank) {
     var doms = m.doms || {};
     var bySkill = _skillFilter !== "all";
     var hv = bySkill ? (doms[_skillFilter] ? doms[_skillFilter].improve : null) : m.score;
@@ -7028,7 +7029,7 @@ window.hideCalibration = async function() {
     var scoreTxt = hv == null ? "—" : signed(hv);
     var batchTag = m.batch ? '<span style="font-size:12px;font-weight:600;color:#8b95a1;margin-right:6px;">' + esc(batchLabel(m.batch)) + '</span>' : '';
     var rankCol = rank === 1 ? "#ff7900" : (rank <= 3 ? "#191f28" : "#c4ccd4");
-    var rankHtml = (m.enough && !noRank)
+    var rankHtml = ((m.enough || forceRank) && !noRank)
       ? '<span style="width:20px;flex-shrink:0;text-align:center;font-size:15px;font-weight:800;color:' + rankCol + ';">' + rank + '</span>'
       : '<span style="width:20px;flex-shrink:0;"></span>';
     var deltaLine = DOMAINS.map(function (dom) { return domDelta(dom, doms[dom]); }).join('<span style="color:#cbd2d9;margin:0 7px;">·</span>');
@@ -7041,11 +7042,13 @@ window.hideCalibration = async function() {
           '<div style="font-size:15.5px;font-weight:800;color:#191f28;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + batchTag + esc(m.name) + '</div>' +
           '<div style="font-size:13px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + deltaLine + '</div>' +
           '<div class="wcgr-act" data-actph="' + esc(m.phone) + '">' + actLineHTML(m.phone) + '</div>' +
+          '<div class="wcgr-ex" data-exph="' + esc(m.phone) + '">' + exLineHTML(m.phone) + '</div>' +   /* 11-05 */
         '</div>' +
         '<div style="text-align:right;flex-shrink:0;">' +
           '<div style="font-size:11.5px;color:#8b95a1;font-weight:700;">' + headLabel + '</div>' +
           '<div style="font-size:19px;font-weight:800;color:' + scoreCol + ';letter-spacing:-.03em;line-height:1.2;white-space:nowrap;">' + (hv != null ? impArrow(hv) + ' ' : '') + scoreTxt + '</div>' +
         '</div>' +
+        (window.wcGcOpen ? '<button type="button" class="wcgr-gc" data-gcph="' + esc(m.phone) + '" data-gcnm="' + esc(m.name) + '">성장 카드</button>' : '') +   /* 11-05 */
         '<svg class="wcgr-chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c4ccd4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;transition:transform .18s;"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
       '</div>' +
       '<div class="wcgr-detail" style="display:none;">' +
@@ -7089,16 +7092,30 @@ window.hideCalibration = async function() {
     return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:0;">' +
       '<select id="wcGrowthBatch" style="height:34px;border:1px solid #e5e8eb;border-radius:9px;font-size:12.5px;font-weight:700;padding:0 30px 0 12px;background:#fff url(data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2212%22%20height=%2212%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%238b95a1%22%20stroke-width=%222.4%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpolyline%20points=%226%209%2012%2015%2018%209%22/%3E%3C/svg%3E) no-repeat right 10px center;background-size:12px;color:#191f28;font-family:inherit;cursor:pointer;appearance:none;-webkit-appearance:none;-moz-appearance:none;">' + opts + '</select>' +
       '<div style="display:inline-flex;background:#f2f4f6;border-radius:10px;padding:3px;">' + seg + '</div>' +
-      '<select id="wcGrowthSort" style="' + selStyle() + 'margin-left:auto;"><option value="g"' + (_sortMode === "g" ? " selected" : "") + '>성장순</option><option value="c"' + (_sortMode === "c" ? " selected" : "") + '>확인한 지 오래된 순</option></select>' +
+      '<select id="wcGrowthSort" style="' + selStyle() + 'margin-left:auto;"><option value="g"' + (_sortMode === "g" ? " selected" : "") + '>성장순</option><option value="h"' + (_sortMode === "h" ? " selected" : "") + '>레퍼런스 노트 적중 성장순</option><option value="r"' + (_sortMode === "r" ? " selected" : "") + '>해결된 코칭 많은 순</option><option value="c"' + (_sortMode === "c" ? " selected" : "") + '>확인한 지 오래된 순</option></select>' +
     '</div>';
   }
   // 필터·정렬 적용 후 전체 본문(필터바+안내+리스트) 반환
   window.wcGrowthRankRender = function () {
     // 11-02: 확인 순 = 활동 중 멤버 전체(평가 횟수 무관) · 성장순 = 지금 그대로
-    var base = (_sortMode === "c" ? checkPeople() : _people).filter(function (m) { return _batchFilter === "all" || String(m.batch || "") === _batchFilter; });
+    var base = (_sortMode === "g" ? _people : checkPeople()).filter(function (m) { return _batchFilter === "all" || String(m.batch || "") === _batchFilter; });
     var pool = base.filter(function (m) { return _rateFilter === "all" || rateBand(m.phone) === _rateFilter; });
     var staleN = pool.filter(function (m) { return isStale(m.phone); }).length;
     if (_staleOnly) pool = pool.filter(function (m) { return isStale(m.phone); });
+    if (_sortMode === "h" || _sortMode === "r") {   // 11-05: 레퍼런스 노트 적중 · 해결된 코칭
+      var X = window.wcGrowthExtra, isH = _sortMode === "h", ready = !!(X && X.get("") !== null);
+      var xv = function (m) { var x = X.get(m.phone) || {}; if (!isH) return x.res || null; return (x.hit && x.hit.e != null && x.hit.r != null && x.span >= 56 * 864e5) ? x.hit.r - x.hit.e : null; };
+      var hx = filterBarHTML() + filterRow2HTML(base, staleN) +
+        '<div style="font-size:14px;font-weight:700;color:#4e5968;margin-bottom:5px;line-height:1.5;">' + (isH ? '<b style="color:#ff7900;">레퍼런스 노트 적중</b> 성장 폭이 큰 순으로 정렬했어요.' : '<b style="color:#ff7900;">해결된 코칭</b>이 많은 순으로 정렬했어요.') + '</div>' +
+        '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">' + (isH ? '가입 후 첫 4주와 최근 4주를 비교해요 · 기록이 8주 이상인 멤버만' : '코칭 코멘트에 \'해결됨\'을 표시한 건수예요') + '</div>';
+      if (!ready) return hx + '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">불러오는 중…</div>';
+      var qx = pool.filter(function (m) { return xv(m) != null; }).sort(function (a, b) { return xv(b) - xv(a); });
+      if (!qx.length) hx += '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">' + (isH ? '비교할 기록이 쌓인 멤버가 아직 없어요.' : '아직 해결된 코칭이 없어요. 코멘트에서 \'해결됨\'을 누르면 여기 잡혀요.') + '</div>';
+      else { var rx = 0; hx += qx.map(function (m) { rx++; return memberCard(m, rx, false, true); }).join(""); }
+      var left = pool.length - qx.length;
+      if (left > 0 && qx.length) hx += '<div style="margin-top:14px;font-size:12.5px;color:#8b95a1;">' + (isH ? '기록이 8주보다 짧거나 레퍼런스 노트 기록이 없는 멤버 ' : '해결된 코칭이 없는 멤버 ') + left + '명은 목록에서 빠졌어요.</div>';
+      return hx;
+    }
     if (_sortMode === "c") {
       pool = pool.slice().sort(function (a, b) { return chkDays(b.phone) - chkDays(a.phone); });
       var hc = filterBarHTML() + filterRow2HTML(base, staleN) +
@@ -7264,6 +7281,20 @@ window.hideCalibration = async function() {
     if (_skillFilter !== "센서리" || window.__wcNoteSum !== undefined || typeof window.wcNoteBulk !== "function") return;
     window.__wcNoteSum = null;
     window.wcNoteBulk().then(function (m) { window.__wcNoteSum = m || {}; paintChk(); }, function () { window.__wcNoteSum = {}; paintChk(); });
+  }
+  /* 11-05: 레퍼런스 노트 적중 · 해결된 코칭 한 줄 (커핑 14 · wcGrowthExtra) — 나빠지면 회색 */
+  function exLineHTML(ph) {
+    var X = window.wcGrowthExtra; if (!X) return "";
+    var x = X.get(ph); if (x === null) return '레퍼런스 노트 불러오는 중…';
+    var S = '<span class="sep">·</span>', h = x.hit || {};
+    var a = (h.e != null && h.r != null)
+      ? '레퍼런스 노트 ' + Math.round(h.e) + '% → <b class="' + (Math.round(h.r) > Math.round(h.e) ? "up" : "dn") + '">' + Math.round(h.r) + '%</b>'
+      : '레퍼런스 노트 <span class="m">비교할 기록 없음</span>';
+    return a + S + '해결된 코칭 ' + (x.res ? '<b>' + x.res + '건</b>' : '<span class="m">—</span>');
+  }
+  function exRefresh() {
+    var body = _$("wcGrowthBody"); if (!body) return;
+    Array.prototype.forEach.call(body.querySelectorAll(".wcgr-ex"), function (el) { el.innerHTML = exLineHTML(el.getAttribute("data-exph")); });
   }
   function actLineHTML(ph) {
     if (_skillFilter === "센서리") return sensLineHTML(ph);
@@ -7676,12 +7707,14 @@ window.hideCalibration = async function() {
       ".wcgr-act{font-size:12.5px;color:#8b95a1;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       ".wcgr-act b{font-weight:700;color:#4e5968;}.wcgr-act b.ok{color:#00b386;}.wcgr-act b.mid{color:#ea6f00;}.wcgr-act b.low{color:#e5484d;}" +
       ".wcgr-act .sep{color:#d1d6db;margin:0 7px;}.wcgr-act .m{color:#b0b8c1;font-weight:500;}" +
+      ".wcgr-ex{font-size:12.5px;color:#8b95a1;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wcgr-ex b{font-weight:700;color:#4e5968;}.wcgr-ex b.up{color:#00b386;font-weight:800;}.wcgr-ex b.dn{color:#8b95a1;}.wcgr-ex .sep{color:#d1d6db;margin:0 7px;}.wcgr-ex .m{color:#b0b8c1;font-weight:500;}" +
+      ".wcgr-gc{height:32px;padding:0 12px;border:1px solid #ff7900;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;}" +   /* 11-05 */
       ".wcgr-chk{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 4px 4px 37px;}" +
       ".wcgr-chk .cbtn{height:34px;padding:0 14px;border:1px solid #ffd7b5;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}" +
       ".wcgr-chk .cbtn:disabled{opacity:.5;cursor:default;}" +
       ".wcgr-chk .done{font-size:13px;font-weight:700;color:#00b386;}" +
       ".wcgr-chk .undo{border:none;background:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:#8b95a1;cursor:pointer;text-decoration:underline;}" +
-      "@media (max-width:720px){.wcgr-row2{gap:14px;}.wcgr-grp{flex-direction:column;align-items:flex-start;gap:6px;}.wcgr-chips{flex-wrap:wrap;}.wcgr-chip{padding:0 8px;}.wcgr-act{white-space:normal;}.wcgr-act .it{white-space:nowrap;}#wcGrowthSort{margin-left:0!important;}}";
+      "@media (max-width:720px){.wcgr-row2{gap:14px;}.wcgr-grp{flex-direction:column;align-items:flex-start;gap:6px;}.wcgr-chips{flex-wrap:wrap;}.wcgr-chip{padding:0 8px;}.wcgr-act{white-space:normal;}.wcgr-act .it{white-space:nowrap;}#wcGrowthSort{margin-left:0!important;}.wcgr-ex{white-space:normal;}.wcgr-gc{padding:0 9px;font-size:12px;}}";
     document.head.appendChild(st);
   }
   function ensureStyle() {
@@ -7730,6 +7763,8 @@ window.hideCalibration = async function() {
       if (more) { histMore(more); return; }
       var hop = e.target.closest && e.target.closest("[data-histopen]");
       if (hop) { histOpen(hop); return; }
+      var gcb = e.target.closest && e.target.closest("[data-gcph]");   // 11-05: 줄 끝 '성장 카드'
+      if (gcb) { if (window.wcGcOpen) window.wcGcOpen(gcb.getAttribute("data-gcph"), gcb.getAttribute("data-gcnm")); return; }
       var head = e.target.closest && e.target.closest(".wcgr-head"); if (!head) return;
       var card = head.closest(".wcgr-card"); if (!card) return;
       var det = card.querySelector(".wcgr-detail"); if (!det) return;
@@ -7773,6 +7808,7 @@ window.hideCalibration = async function() {
       if (_batchFilter !== "all" && _batchList.indexOf(_batchFilter) < 0) _batchFilter = "all";
       repaint();
       _act = null; loadAct().then(repaintKeep);   // 방문 기록은 뒤에서 받아 다시 그림
+      if (window.wcGrowthExtra) window.wcGrowthExtra.load().then(function () { if (_sortMode === "h" || _sortMode === "r") repaintKeep(); else exRefresh(); });   // 11-05
     } catch (e) {
       console.error("[growth] 열기 실패", e);
       if (body) body.innerHTML = '<div style="padding:30px 0;text-align:center;color:#e5484d;font-size:13px;">불러오지 못했어요. 새로고침 후 다시 시도해 주세요.</div>';
@@ -8471,7 +8507,6 @@ window.hideCalibration = async function() {
     var P = "#wcCupRecPage ";
     st.textContent =
       "#wcGrowthSubNav{margin:0 0 18px;}#wcCupRecPage{display:none;}#wcGrowthPage.wc-tab-c #wcCupRecPage{display:block;}#wcGrowthPage.wc-tab-c .wcgr-mainbox{display:none!important;}" +
-      "#wcHlPage{display:none;}#wcGrowthPage.wc-tab-h #wcHlPage{display:block;}#wcGrowthPage.wc-tab-h .wcgr-mainbox{display:none!important;}" +   /* 11-05 */
       P + ".crtop{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px;}" +
       P + ".crseg{display:inline-flex;border:1px solid #e5e8eb;border-radius:9px;overflow:hidden;background:#fff;}" +
       P + ".crseg button{height:34px;padding:0 14px;border:none;background:#fff;font-family:inherit;font-size:13px;font-weight:700;color:#8b95a1;cursor:pointer;}" +
@@ -8515,14 +8550,13 @@ window.hideCalibration = async function() {
     if (!head || !card) return false;
     card.classList.add("wcgr-mainbox");
     var nav = document.createElement("div"); nav.className = "sub-nav"; nav.id = "wcGrowthSubNav";
-    nav.innerHTML = '<button type="button" class="sub-item active" data-gtab="g">멤버별 성장</button><button type="button" class="sub-item" data-gtab="h">성장 하이라이트</button><button type="button" class="sub-item" data-gtab="c">커핑 기록</button>';   /* 11-05: 성장 하이라이트 */
+    nav.innerHTML = '<button type="button" class="sub-item active" data-gtab="g">멤버별 성장</button><button type="button" class="sub-item" data-gtab="c">커핑 기록</button>';   /* 11-05: 성장 하이라이트 탭은 멤버별 성장에 합침 */
     head.parentNode.insertBefore(nav, head.nextSibling);
     var pg = document.createElement("div"); pg.id = "wcCupRecPage";
     pg.innerHTML = '<div id="crListView"><div class="crtop"><div class="crseg"><button type="button" data-crv="s" class="on">회차별</button><button type="button" data-crv="b">원두별</button></div>' +
       '<input class="crq" id="crQ" type="search" placeholder="세션명 · 원두 검색"></div><div class="crlist s" id="crList"><div class="crem">불러오는 중…</div></div></div>' +
       '<div id="crDetView" style="display:none;"></div>';
     card.parentNode.insertBefore(pg, card.nextSibling);
-    var hl = document.createElement("div"); hl.id = "wcHlPage"; pg.parentNode.insertBefore(hl, pg.nextSibling);   /* 11-05 */
     nav.addEventListener("click", function (e) { var t = e.target.closest("[data-gtab]"); if (t) crTab(t.getAttribute("data-gtab")); });
     pg.addEventListener("click", function (e) {
       var v = e.target.closest("[data-crv]");
@@ -8541,8 +8575,6 @@ window.hideCalibration = async function() {
   function crTab(t) {
     var gp = _$("wcGrowthPage"); if (!gp || !crInject()) return;
     gp.classList.toggle("wc-tab-c", t === "c");
-    gp.classList.toggle("wc-tab-h", t === "h");   /* 11-05 */
-    if (t === "h" && window.wcHlOpen) window.wcHlOpen();
     gp.querySelectorAll("#wcGrowthSubNav [data-gtab]").forEach(function (x) { x.classList.toggle("active", x.getAttribute("data-gtab") === t); });
     if (t === "c") crLoad(false);
   }
@@ -8847,11 +8879,11 @@ window.hideCalibration = async function() {
 
 
 /* ═══════════════════════════════════════════════════════════
-   WeCoffee Admin · 커핑 14 — 성장 리포트 · 성장 하이라이트 · 성장 카드 (11-05)
+   WeCoffee Admin · 커핑 14 — 성장 리포트 · 멤버별 성장 지표 · 성장 카드 (11-05)
    · 멤버 상세 맨 위 #wcMemReport : 비교(가입 첫 4주 → 최근 4주 / 지난달 → 이번 달)
        레퍼런스 노트 중 짚은 비율 · 센서리 정확도 편차 · 한 컵에 적은 노트 수 · 역량 점수
        레퍼런스 노트 적중 추이 · 해결된 코칭(코멘트 '해결됨' · SQL 30) · 성장 카드 만들기
-   · 성장 현황 › 성장 하이라이트 탭 #wcHlPage : 첫 4주 → 최근 4주 성장 폭이 큰 순
+   · 성장 현황 › 멤버별 성장 : window.wcGrowthExtra (레퍼런스 노트 적중 · 해결된 코칭) — 정렬·한 줄·성장 카드 버튼
    · 성장 카드 창 #wcGcOly : 한 장(센서리·로스팅 코칭·함께 커핑) / 넘겨 보기 5장 · 이름 가리기 · 이미지 저장(4:5 · 1080×1350)
    의존: supabaseClient · 커핑 13(wcNoteData·wcNoteGrowthCompute·wcNoteBulk) · 커핑 8(openHistoryModal)
    서버: coach_notes(+resolved_* · SQL 30) · member_sensory_series RPC · cupping_* · reservations
@@ -9111,105 +9143,45 @@ window.hideCalibration = async function() {
     _sens.at = 0; window.wcReportFill(el, phone, (_rep[digits(phone)] || {}).name);
   };
 
-  /* ═══ 2. 성장 현황 · 성장 하이라이트 ═══ */
-  var HL = { busy: false, rows: null, sort: "hit", long: true };
-  function hlStyle() {
-    if (_$("wcHlStyle")) return;
-    var st = document.createElement("style"); st.id = "wcHlStyle";
-    var P = "#wcHlPage ";
-    st.textContent = P + ".hlh{margin:0 0 14px;}" + P + ".hlh b{display:block;font-size:17px;font-weight:800;color:#191f28;}" + P + ".hlh span{display:block;font-size:13px;color:#8b95a1;margin-top:4px;}" +
-      P + ".hlopt{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}" +
-      P + ".hlopt button{height:32px;padding:0 12px;border:1px solid #e5e8eb;border-radius:999px;background:#fff;font-family:inherit;font-size:12.5px;font-weight:700;color:#4e5968;cursor:pointer;}" +
-      P + ".hlopt button.on{border-color:#ff7900;color:#e86d00;}" + P + ".hlopt .sp{flex:1;}" +
-      P + ".hllist{background:#fff;border:1px solid #e5e8eb;border-radius:16px;padding:4px 16px 8px;}" +
-      P + ".hlr{display:grid;grid-template-columns:minmax(120px,1fr) 190px 130px 110px 90px 80px;gap:10px;align-items:center;padding:13px 6px;border-bottom:1px solid #f2f4f6;font-size:13.5px;color:#191f28;}" +
-      P + ".hlr:last-child{border-bottom:none;}" + P + ".hlr.hd{font-size:12px;font-weight:700;color:#8b95a1;border-bottom:1px solid #e5e8eb;}" +
-      P + ".hlr:not(.hd){cursor:pointer;}" + P + ".hlr:not(.hd):hover{background:#fffaf5;}" +
-      P + ".hlr .bt{font-size:12px;color:#8b95a1;margin-right:6px;}" + P + ".hlr .nm{font-weight:800;}" + P + ".hlr .up{color:#e86d00;font-weight:800;}" + P + ".hlr .g{color:#b0b8c1;}" +
-      P + ".hlem{padding:34px 0;text-align:center;color:#8b95a1;font-size:13px;}" +
-      P + ".hlnote{font-size:12px;color:#8b95a1;margin-top:10px;}" +
-      "@media (max-width:860px){" + P + ".hlr{grid-template-columns:1fr auto;row-gap:4px;}" + P + ".hlr.hd{display:none;}" + P + ".hlr .c2{grid-column:1/-1;font-size:12px;color:#8b95a1;}" + P + ".hlr .c4," + P + ".hlr .c5," + P + ".hlr .c6{display:none;}}";
-    document.head.appendChild(st);
-  }
-  async function hlLoad() {
-    if (HL.busy) return; HL.busy = true;
-    try {
-      var r = await Promise.all([
-        window.wcNoteBulk ? window.wcNoteBulk().catch(function () { return {}; }) : {},
-        sensAll(),
-        sb().from("coach_notes").select("member_phone,eval_domain,score,created_at,resolved_at").then(function (x) { return x; }, function () { return { data: [] }; })
-      ]);
-      var notes = r[2] && !r[2].error ? (r[2].data || []) : [];
-      if (r[2] && r[2].error) {   // SQL 30 전: resolved_at 없이 다시
-        var r3 = await sb().from("coach_notes").select("member_phone,eval_domain,score,created_at"); notes = r3.data || [];
-      }
-      var mem = {}; (window.globalMembers || []).forEach(function (m) { var p = digits(m.phone); if (p) mem[p] = m; });
-      var by = {};
-      function P(ph) { return by[ph] = by[ph] || { phone: ph, hit: [], sens: [], score: {}, resolved: 0 }; }
-      Object.keys(r[0] || {}).forEach(function (ph) { P(ph).hit = (r[0][ph].pts || []).map(function (p) { return { at: p.at, v: p.rate }; }); });
-      Object.keys(r[1] || {}).forEach(function (ph) { P(ph).sens = r[1][ph]; });
-      notes.forEach(function (n) {
-        var ph = digits(n.member_phone); if (!ph) return; var o = P(ph);
-        if (n.score != null && n.eval_domain) (o.score[n.eval_domain] = o.score[n.eval_domain] || []).push({ at: ts(n.created_at), v: Number(n.score) });
-        if (n.resolved_at) o.resolved++;
-      });
-      var now = Date.now(), rows = [];
-      Object.keys(by).forEach(function (ph) {
-        var o = by[ph], m = mem[ph]; if (!m) return;
-        var all = [].concat(o.hit, o.sens).map(function (p) { return p.at; }); Object.keys(o.score).forEach(function (d) { o.score[d].forEach(function (p) { all.push(p.at); }); });
-        all = all.filter(Boolean); if (!all.length) return;
-        var t0 = Math.min.apply(null, all), t1 = Math.max.apply(null, all), w = windows("j", t0, now);
-        var hk = cmp(o.hit, w), sk = cmp(o.sens, w), bk = bestScore(o.score, w);
-        rows.push({ phone: ph, name: m.name || ph, batch: m.batch || "", t0: t0, t1: t1, span: t1 - t0, hit: hk, sens: sk, sc: bk, resolved: o.resolved,
-          k: { hit: (hk.e != null && hk.r != null) ? hk.r - hk.e : null, sens: (sk.e != null && sk.r != null) ? sk.e - sk.r : null, sc: bk ? bk.imp : null, res: o.resolved || null } });
-      });
-      HL.rows = rows;
-    } catch (e) { console.warn("[성장 하이라이트] 불러오기 실패", e); HL.rows = []; }
-    HL.busy = false;
-  }
-  function fmtPair(k, f) { return (k.e != null && k.r != null) ? f(k.e) + ' → <span class="up">' + f(k.r) + '</span>' : '<span class="g">—</span>'; }
-  function hlPaint() {
-    var pg = _$("wcHlPage"); if (!pg) return;
-    var h = '<div class="hlh"><b>눈에 띄게 성장한 멤버</b><span>가입 후 첫 4주와 최근 4주를 비교해 성장 폭이 큰 순서로 보여요.</span></div>' +
-      '<div class="hlopt">' + [["hit", "레퍼런스 노트 적중"], ["sens", "센서리 정확도"], ["sc", "역량 점수"], ["res", "해결된 코칭"]].map(function (x) { return '<button type="button" data-hls="' + x[0] + '"' + (HL.sort === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>'; }).join("") +
-      '<span class="sp"></span><button type="button" data-hll="1"' + (HL.long ? ' class="on"' : '') + '>기록 8주 이상 멤버만</button></div>';
-    if (!HL.rows) { pg.innerHTML = h + '<div class="hllist"><div class="hlem">불러오는 중…</div></div>'; return; }
-    var rows = HL.rows.filter(function (r) { return (!HL.long || r.span >= 8 * 7 * DAY) && r.k[HL.sort] != null && r.k[HL.sort] > 0; })
-      .sort(function (a, b) { return b.k[HL.sort] - a.k[HL.sort]; }).slice(0, 30);
-    h += '<div class="hllist"><div class="hlr hd"><span>멤버</span><span>비교 기간</span><span>레퍼런스 노트 적중</span><span>센서리 편차</span><span>역량 점수</span><span>해결된 코칭</span></div>';
-    if (!rows.length) h += '<div class="hlem">' + (HL.long ? '기록이 8주 이상 쌓인 멤버 중 성장한 멤버가 아직 없어요. \'기록 8주 이상 멤버만\'을 끄면 더 보여요.' : '비교할 기록이 아직 없어요.') + '</div>';
-    rows.forEach(function (r) {
-      h += '<div class="hlr" data-hlp="' + esc(r.phone) + '" data-hln="' + esc(r.name) + '"><span class="c1"><span class="bt">' + esc(batchTxt(r.batch)) + '</span><span class="nm">' + esc(r.name) + '</span></span>' +
-        '<span class="c2">' + mdw(r.t0) + ' → ' + mdw(r.t1) + '</span>' +
-        '<span class="c3">' + fmtPair(r.hit, function (v) { return Math.round(v) + "%"; }) + '</span>' +
-        '<span class="c4">' + fmtPair(r.sens, function (v) { return r1(v); }) + '</span>' +
-        '<span class="c5">' + (r.sc ? r1(r.sc.e) + ' → <span class="up">' + r1(r.sc.r) + '</span>' : '<span class="g">—</span>') + '</span>' +
-        '<span class="c6">' + (r.resolved ? r.resolved + '건' : '<span class="g">—</span>') + '</span></div>';
-    });
-    h += '</div><div class="hlnote">줄을 누르면 그 멤버의 성장 리포트로 가요.</div>';
-    pg.innerHTML = h;
-  }
-  window.wcHlOpen = async function () {
-    var pg = _$("wcHlPage"); if (!pg) return;
-    hlStyle();
-    if (!pg.__wcHl) {
-      pg.__wcHl = 1;
-      pg.addEventListener("click", function (e) {
-        var s = e.target.closest("[data-hls]"); if (s) { HL.sort = s.getAttribute("data-hls"); hlPaint(); return; }
-        if (e.target.closest("[data-hll]")) { HL.long = !HL.long; hlPaint(); return; }
-        var row = e.target.closest("[data-hlp]");
-        if (row && typeof window.openHistoryModal === "function") {
-          window.openHistoryModal(row.getAttribute("data-hlp"), row.getAttribute("data-hln"));
-          var n = 0, t = setInterval(function () { var r = _$("wcMemReport"); if (r || ++n > 40) { clearInterval(t); if (r) try { r.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e2) {} } }, 250);
-        }
-      });
+  /* ═══ 2. 멤버별 성장용 지표 (11-05: 하이라이트 탭 대신 멤버별 성장에 합침) ═══
+     window.wcGrowthExtra.get(phone) → { hit:{e,r}, span, res } · 불러오기 전엔 null */
+  var GX = { map: null, at: 0, p: null };
+  window.wcGrowthExtra = {
+    get: function (ph) { return GX.map ? (GX.map[digits(ph)] || {}) : null; },
+    reset: function () { GX.at = 0; },
+    load: function (force) {
+      if (GX.p && !force && GX.at && Date.now() - GX.at < 120000) return GX.p;
+      GX.at = Date.now();
+      GX.p = (async function () {
+        try {
+          var r = await Promise.all([
+            window.wcNoteBulk ? window.wcNoteBulk().catch(function () { return {}; }) : {},
+            sensAll(),
+            sb().from("coach_notes").select("member_phone,created_at,resolved_at").then(function (x) { return x; }, function () { return { data: [] }; })
+          ]);
+          var notes = r[2] && !r[2].error ? (r[2].data || []) : [];
+          if (r[2] && r[2].error) { var r3 = await sb().from("coach_notes").select("member_phone,created_at"); notes = r3.data || []; }   // SQL 30 전
+          var by = {}, now = Date.now();
+          function P(ph) { return by[ph] = by[ph] || { hit: [], at: [], res: 0 }; }
+          Object.keys(r[0] || {}).forEach(function (ph) { var o = P(ph); o.hit = (r[0][ph].pts || []).map(function (q) { return { at: q.at, v: q.rate }; }); o.hit.forEach(function (q) { o.at.push(q.at); }); });
+          Object.keys(r[1] || {}).forEach(function (ph) { var o = P(ph); r[1][ph].forEach(function (q) { o.at.push(q.at); }); });
+          notes.forEach(function (n) { var ph = digits(n.member_phone); if (!ph) return; var o = P(ph); o.at.push(ts(n.created_at)); if (n.resolved_at) o.res++; });
+          var map = {};
+          Object.keys(by).forEach(function (ph) {
+            var o = by[ph], all = o.at.filter(Boolean); if (!all.length) { map[ph] = { res: o.res }; return; }
+            var t0 = Math.min.apply(null, all), t1 = Math.max.apply(null, all);
+            map[ph] = { hit: cmp(o.hit, windows("j", t0, now)), span: t1 - t0, res: o.res };
+          });
+          GX.map = map;
+        } catch (e) { console.warn("[멤버별 성장] 레퍼런스 노트·해결된 코칭 불러오기 실패", e); GX.map = GX.map || {}; }
+        return GX.map;
+      })();
+      return GX.p;
     }
-    hlPaint();
-    if (!HL.rows || !HL.at || Date.now() - HL.at > 120000) { HL.rows = null; hlPaint(); await hlLoad(); HL.at = Date.now(); hlPaint(); }
   };
 
   /* ═══ 3. 성장 카드 ═══ */
-  var GC = { fmt: "one", mask: true, g: null, name: "", peer: null };
+  var GC = { fmt: "one", mask: true, g: null, name: "", peer: null, bg: {}, sel: null };
   function gcStyle() {
     if (_$("wcGcStyle")) return;
     var st = document.createElement("style"); st.id = "wcGcStyle";
@@ -9246,7 +9218,25 @@ window.hideCalibration = async function() {
       O + ".peer{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;}" + O + ".peer span{border:1px solid #e5e8eb;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:600;}" +
       O + "[contenteditable]{outline:none;border-radius:4px;}" + O + "[contenteditable]:hover{box-shadow:0 0 0 1px rgba(255,121,0,.5);}" + O + "[contenteditable]:focus{box-shadow:0 0 0 2px #ff7900;}" +
       O + "[contenteditable].ph:empty:before{content:attr(data-ph);opacity:.45;}" +
-      O + ".gcx .ph:empty{display:none;}" + O + ".gcx [contenteditable]{box-shadow:none!important;}";
+      "#wcGcOly.gcx .ph:empty{display:none;}" + "#wcGcOly.gcx [contenteditable]{box-shadow:none!important;}" +
+      /* 11-05: 카드별 배경 이미지 · 덮개 */
+      O + ".gcl{display:flex;gap:24px;align-items:flex-start;}" + O + ".gcl .gcs{flex:1;min-width:0;}" +
+      O + ".gcp{flex:0 0 320px;position:sticky;top:76px;border:1px solid #e5e8eb;border-radius:16px;padding:16px 18px;background:#fff;box-sizing:border-box;}" +
+      O + ".gcp h4{margin:0 0 12px;font-size:14.5px;font-weight:800;}" + O + ".gcp h4 span{color:#e86d00;}" +
+      O + ".gcf{padding:11px 0;border-top:1px solid #f2f4f6;}" + O + ".gcf:first-of-type{border-top:none;padding-top:0;}" +
+      O + ".gcf > label{display:block;font-size:12.5px;font-weight:700;color:#4e5968;margin-bottom:8px;}" +
+      O + ".gcf .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}" + O + ".gcf.off{opacity:.4;pointer-events:none;}" +
+      O + ".gcsw{width:28px;height:28px;border-radius:50%;border:1px solid #e5e8eb;cursor:pointer;padding:0;}" + O + ".gcsw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #ff7900;}" +
+      O + ".gcf input[type=color]{width:28px;height:28px;border:1px solid #e5e8eb;border-radius:50%;padding:0;background:none;cursor:pointer;}" +
+      O + ".gcf input[type=range]{width:100%;accent-color:#ff7900;margin:0;}" + O + ".gcrv{display:flex;justify-content:space-between;font-size:11.5px;color:#8b95a1;margin-top:4px;}" +
+      O + ".gcpn{font-size:12px;color:#8b95a1;line-height:1.6;margin-top:10px;}" +
+      O + ".gcs .pc{cursor:pointer;}" + O + ".gcs .pc.sel{box-shadow:0 0 0 3px #ff7900;}" + "#wcGcOly.gcx .gcs .pc.sel{box-shadow:none;}" +
+      O + ".pc > .gbg," + O + ".pc > .gov{position:absolute;inset:0;z-index:0;pointer-events:none;}" + O + ".pc > .gbg{background-size:cover;background-repeat:no-repeat;}" +
+      O + ".pc.hbg{border-color:transparent;}" + O + ".pc.hbg > *:not(.gbg):not(.gov){position:relative;z-index:1;}" +
+      O + ".pc.gl{color:#fff;}" + O + ".pc.gl .big .b[style]{color:#fff!important;}" + O + ".pc.gl .fw{color:rgba(255,255,255,.75);}" + O + ".pc.gl .fw em{background:rgba(255,255,255,.45);}" + O + ".pc.gl .peer span{border-color:rgba(255,255,255,.55);}" +
+      O + ".pc.gd{color:#191f28;}" + O + ".pc.gd .at i{border-color:rgba(25,31,40,.35);}" + O + ".pc.gd .at b{background:rgba(25,31,40,.2);}" +
+      O + ".pc.accw .k," + O + ".pc.accw .big .b," + O + ".pc.accw .fw .on{color:#fff!important;}" + O + ".pc.accw .sp2 polyline{stroke:#fff;}" + O + ".pc.accw .sp2 circle{stroke:#fff;}" + O + ".pc.accw .sp2 circle:last-child{fill:#fff;}" + O + ".pc.accw .at i.o{background:#fff;}" +
+      "@media (max-width:900px){" + O + ".gcl{flex-direction:column;}" + O + ".gcp{position:static;width:100%;flex-basis:auto;}}";
     document.head.appendChild(st);
   }
   function who() { var g = GC.g || {}, m = ((window.globalMembers || []).filter(function (x) { return digits(x.phone) === g.phone; })[0]) || {}; var nm = GC.mask ? maskName(GC.name) : GC.name; return (batchTxt(m.batch) + " " + nm).trim(); }
@@ -9332,6 +9322,97 @@ window.hideCalibration = async function() {
         '<div class="q">' + ed("qq", "멤버 모집 중") + '</div>' + pg(5) + '</div>'
     ].join("");
   }
+  /* ═══ 카드별 배경 (11-05) — 이미지 · 덮개(단색/그라디언트) · 투명도 · 글자 색. 저장 안 함 ═══ */
+  var BG_SW = ["#191f28", "#000000", "#3b2a20", "#ff7900", "#ffffff"];
+  var BG_NM = { "센서리성장": "센서리 성장", "로스팅코칭": "로스팅 코칭", "함께커핑": "함께 커핑" };
+  function bgName(n) { var m = /^넘겨보기_(\d)$/.exec(n || ""); return m ? "넘겨 보기 " + m[1] + "장" : (BG_NM[n] || n || ""); }
+  function bgOf(n) { return GC.bg[n] = GC.bg[n] || { img: "", pos: 50, mode: "solid", c1: "#191f28", dir: "to top", op: 55, tx: "lt" }; }
+  function rgba(hex, a) { var h = String(hex || "#000").replace("#", ""); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return "rgba(" + parseInt(h.substr(0, 2), 16) + "," + parseInt(h.substr(2, 2), 16) + "," + parseInt(h.substr(4, 2), 16) + "," + Math.max(0, Math.min(1, a)) + ")"; }
+  function isOrange(hex) {   // 덮개가 주황 계열이면 카드 속 주황 글자·그래프를 흰색으로
+    var h = String(hex || "").replace("#", ""); if (h.length !== 6) return false;
+    var r = parseInt(h.substr(0, 2), 16) / 255, g = parseInt(h.substr(2, 2), 16) / 255, b = parseInt(h.substr(4, 2), 16) / 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn; if (!d) return false;
+    var sat = d / (1 - Math.abs(2 * l - 1)), hue = mx === r ? 60 * (((g - b) / d) % 6) : (mx === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4)); if (hue < 0) hue += 360;
+    return hue >= 12 && hue <= 45 && sat > 0.55 && l > 0.3 && l < 0.75;
+  }
+  function bgApply(card) {
+    var n = card.getAttribute("data-name"), st = GC.bg[n], dk = card.classList.contains("dk");
+    card.classList.toggle("sel", n === GC.sel);
+    Array.prototype.forEach.call(card.querySelectorAll(":scope > .gbg, :scope > .gov"), function (x) { x.remove(); });
+    card.classList.remove("hbg", "gl", "gd", "accw");
+    var has = !!(st && st.img), lt = has ? st.tx === "lt" : dk;
+    var lg = card.querySelector(".lg img"); if (lg) lg.src = lt ? (_logoW || window.wcLogoURL || "") : (window.wcLogoURL || "");
+    if (!has) return;
+    card.classList.add("hbg", lt ? "gl" : "gd");
+    var bg = document.createElement("div"); bg.className = "gbg"; bg.style.backgroundImage = "url(" + st.img + ")"; bg.style.backgroundPosition = "50% " + st.pos + "%";
+    card.insertBefore(bg, card.firstChild);
+    if (st.mode !== "none") {
+      var ov = document.createElement("div"), a = st.op / 100; ov.className = "gov";
+      ov.style.background = st.mode === "grad" ? "linear-gradient(" + st.dir + "," + rgba(st.c1, Math.min(1, a * 1.4)) + " 0%," + rgba(st.c1, a * 0.5) + " 55%," + rgba(st.c1, 0) + " 100%)" : rgba(st.c1, a);
+      card.insertBefore(ov, bg.nextSibling);
+      if (isOrange(st.c1)) card.classList.add("accw");
+    }
+  }
+  function bgPanel() {
+    var o = _$("wcGcOly"), pn = o && o.querySelector(".gcp"); if (!pn) return;
+    if (!GC.sel) { pn.innerHTML = '<h4>배경</h4><div class="gcpn">카드가 생기면 여기서 배경을 넣을 수 있어요.</div>'; return; }
+    var st = bgOf(GC.sel), has = !!st.img, on = function (c) { return c ? " on" : ""; };
+    pn.innerHTML = '<h4>배경 · <span>' + esc(bgName(GC.sel)) + '</span></h4>' +
+      '<div class="gcf"><label>배경 이미지</label><div class="row"><button type="button" class="gcb o" data-bgup>' + (has ? "다른 이미지" : "이미지 올리기") + '</button>' + (has ? '<button type="button" class="gcb o" data-bgrm>빼기</button>' : '') + '<input type="file" accept="image/*" data-bgfile hidden></div></div>' +
+      '<div class="gcf' + (has ? "" : " off") + '"><label>이미지 위치 (세로)</label><input type="range" min="0" max="100" value="' + st.pos + '" data-bgk="pos"><div class="gcrv"><span>위</span><span>아래</span></div></div>' +
+      '<div class="gcf' + (has ? "" : " off") + '"><label>덮개</label><div class="row">' + [["none", "없음"], ["solid", "단색"], ["grad", "그라디언트"]].map(function (x) { return '<button type="button" class="gcc' + on(st.mode === x[0]) + '" data-bgmode="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</div></div>' +
+      '<div class="gcf' + (has && st.mode !== "none" ? "" : " off") + '"><label>' + (st.mode === "grad" ? "색 · 진한 쪽에서 투명으로 사라져요" : "색") + '</label><div class="row">' + BG_SW.map(function (c) { return '<button type="button" class="gcsw' + on(st.c1 === c) + '" data-bgc="' + c + '" style="background:' + c + '"></button>'; }).join("") + '<input type="color" value="' + esc(st.c1) + '" data-bgcc title="직접 고르기"></div></div>' +
+      (st.mode === "grad" ? '<div class="gcf' + (has ? "" : " off") + '"><label>그라디언트 방향</label><div class="row">' + [["to top", "아래가 진하게"], ["to bottom", "위가 진하게"], ["to right", "왼쪽이 진하게"]].map(function (x) { return '<button type="button" class="gcc' + on(st.dir === x[0]) + '" data-bgdir="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</div></div>' : '') +
+      '<div class="gcf' + (has && st.mode !== "none" ? "" : " off") + '"><label>투명도 <span data-bgopv style="color:#8b95a1;font-weight:600;margin-left:4px;">' + st.op + '%</span></label><input type="range" min="0" max="100" value="' + st.op + '" data-bgk="op"><div class="gcrv"><span>투명</span><span>진하게</span></div></div>' +
+      '<div class="gcf' + (has ? "" : " off") + '"><label>글자 색</label><div class="row"><button type="button" class="gcc' + on(st.tx === "lt") + '" data-bgtx="lt">밝게</button><button type="button" class="gcc' + on(st.tx === "dk") + '" data-bgtx="dk">어둡게</button></div></div>' +
+      '<div class="gcpn">카드를 누르면 그 카드의 배경을 고를 수 있어요. 덮개를 주황으로 고르면 카드 속 주황 글자와 그래프는 흰색으로 바뀌어요. 배경 이미지는 저장되지 않아요.</div>';
+  }
+  function bgRepaintSel() { var o = _$("wcGcOly"); if (!o) return; Array.prototype.forEach.call(o.querySelectorAll(".gcs .pc"), bgApply); }
+  function bgRead(file) {   // 큰 사진은 긴 변 1600px 로 줄여서 씀
+    return new Promise(function (ok, no) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var im = new Image();
+        im.onload = function () {
+          var k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement("canvas");
+          c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+          c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+          try { ok(c.toDataURL("image/jpeg", 0.9)); } catch (e) { ok(fr.result); }
+        };
+        im.onerror = function () { no(new Error("image")); };
+        im.src = fr.result;
+      };
+      fr.onerror = function () { no(new Error("read")); };
+      fr.readAsDataURL(file);
+    });
+  }
+  function bgBind(o) {
+    var pn = o.querySelector(".gcp");
+    o.querySelector(".gcs").addEventListener("click", function (e) {
+      var c = e.target.closest(".pc"); if (!c) return;
+      GC.sel = c.getAttribute("data-name"); bgRepaintSel(); bgPanel();
+    });
+    pn.addEventListener("click", function (e) {
+      if (!GC.sel) return; var st = bgOf(GC.sel), t;
+      if (e.target.closest("[data-bgup]")) { pn.querySelector("[data-bgfile]").click(); return; }
+      if (e.target.closest("[data-bgrm]")) { st.img = ""; bgRepaintSel(); bgPanel(); return; }
+      if ((t = e.target.closest("[data-bgmode]"))) { st.mode = t.getAttribute("data-bgmode"); bgRepaintSel(); bgPanel(); return; }
+      if ((t = e.target.closest("[data-bgc]"))) { st.c1 = t.getAttribute("data-bgc"); bgRepaintSel(); bgPanel(); return; }
+      if ((t = e.target.closest("[data-bgdir]"))) { st.dir = t.getAttribute("data-bgdir"); bgRepaintSel(); bgPanel(); return; }
+      if ((t = e.target.closest("[data-bgtx]"))) { st.tx = t.getAttribute("data-bgtx"); bgRepaintSel(); bgPanel(); return; }
+    });
+    pn.addEventListener("input", function (e) {
+      if (!GC.sel) return; var st = bgOf(GC.sel), k = e.target.getAttribute("data-bgk");
+      if (k) { st[k] = Number(e.target.value); if (k === "op") { var v = pn.querySelector("[data-bgopv]"); if (v) v.textContent = st.op + "%"; } bgRepaintSel(); return; }
+      if (e.target.hasAttribute("data-bgcc")) { st.c1 = e.target.value; bgRepaintSel(); }
+    });
+    pn.addEventListener("change", function (e) {
+      if (e.target.hasAttribute("data-bgcc")) { bgPanel(); return; }
+      if (!e.target.hasAttribute("data-bgfile") || !GC.sel) return;
+      var f = e.target.files && e.target.files[0], n = GC.sel; if (!f) return;
+      bgRead(f).then(function (u) { bgOf(n).img = u; bgRepaintSel(); bgPanel(); }, function () { if (typeof showToast === "function") showToast("이미지를 불러오지 못했어요."); });
+    });
+  }
   function gcPaint() {
     var o = _$("wcGcOly"); if (!o) return;
     var body = o.querySelector(".gcs"), sd = sensoryData(), rd = roastData(), pd = GC.peer;
@@ -9347,6 +9428,10 @@ window.hideCalibration = async function() {
       if (!h) h = '<div class="gcem">카드로 만들 기록이 아직 없어요. 커핑 기록 2회 이상, 해결된 코칭, 동료와 함께 한 커핑 중 하나가 있어야 해요.</div>';
     }
     body.innerHTML = h;
+    var names = Array.prototype.map.call(body.querySelectorAll(".pc"), function (c) { return c.getAttribute("data-name"); });
+    if (names.indexOf(GC.sel) < 0) GC.sel = names[0] || null;
+    Array.prototype.forEach.call(body.querySelectorAll(".pc"), bgApply);
+    bgPanel();
     var hint = [];
     if (!rd) hint.push("로스팅 코칭 카드는 코멘트에 '해결됨'을 표시하면 생겨요.");
     if (!pd) hint.push("함께 커핑 카드는 내가 볶은 원두를 다른 멤버가 평가한 커핑이 있으면 생겨요.");
@@ -9382,15 +9467,16 @@ window.hideCalibration = async function() {
     gcStyle();
     var d = digits(phone), g = _rep[d] || await gather(d);
     if (!g.resolved) g.resolved = await resolvedItems(g).catch(function () { return []; });
-    GC.g = g; GC.name = name || g.name || ""; GC.fmt = "one"; GC.mask = true; GC.peer = null;
+    GC.g = g; GC.name = name || g.name || ""; GC.fmt = "one"; GC.mask = true; GC.peer = null; GC.bg = {}; GC.sel = null;
     var o = _$("wcGcOly"); if (o) o.remove();
     o = document.createElement("div"); o.id = "wcGcOly";
     o.innerHTML = '<div class="gch"><b>성장 카드</b>' +
       '<button type="button" class="gcc" data-gcf="one">한 장</button><button type="button" class="gcc" data-gcf="car">넘겨 보기 5장</button><span style="width:10px"></span>' +
       '<button type="button" class="gcc" data-gcm="1">이름 가리기</button><button type="button" class="gcc" data-gcm="0">이름 그대로</button>' +
       '<span class="sp"></span><button type="button" class="gcb o" data-gcx>닫기</button><button type="button" class="gcb" data-gcs>이미지 저장</button></div>' +
-      '<div class="gcw"><p class="gcnote"></p><div class="gcs"><div class="gcem">불러오는 중…</div></div></div>';
+      '<div class="gcw"><p class="gcnote"></p><div class="gcl"><div class="gcs"><div class="gcem">불러오는 중…</div></div><div class="gcp"></div></div></div>';
     document.body.appendChild(o);
+    bgBind(o);
     o.addEventListener("click", function (e) {
       var f = e.target.closest("[data-gcf]"); if (f) { GC.fmt = f.getAttribute("data-gcf"); gcPaint(); return; }
       var m = e.target.closest("[data-gcm]"); if (m) { GC.mask = m.getAttribute("data-gcm") === "1"; gcPaint(); return; }
