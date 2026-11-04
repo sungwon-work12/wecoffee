@@ -9353,7 +9353,14 @@ window.hideCalibration = async function() {
       O + ".pc.hbg{border-color:transparent;}" + O + ".pc.hbg > *:not(.gbg):not(.gov){position:relative;z-index:1;}" +
       O + ".pc.gl{color:#fff;}" + O + ".pc.gl .big .b[style]{color:#fff!important;}" + O + ".pc.gl .fw{color:rgba(255,255,255,.75);}" + O + ".pc.gl .fw em{background:rgba(255,255,255,.45);}" + O + ".pc.gl .peer span{border-color:rgba(255,255,255,.55);}" +
       O + ".pc.gd{color:#191f28;}" + O + ".pc.gd .at i{border-color:rgba(25,31,40,.35);}" + O + ".pc.gd .at b{background:rgba(25,31,40,.2);}" +
-      O + ".pc.accw .k," + O + ".pc.accw .big .b," + O + ".pc.accw .fw .on{color:#fff!important;}" + O + ".pc.accw .sp2 polyline{stroke:#fff;}" + O + ".pc.accw .sp2 circle{stroke:#fff;}" + O + ".pc.accw .sp2 circle:last-child{fill:#fff;}" + O + ".pc.accw .at i.o{background:#fff;}" +
+      /* 배경 위에서는 흐린 글자(opacity)가 덮개 아래에 깔린 것처럼 보여서 — 글자는 불투명, 보조 글자만 색으로 옅게 */
+      O + ".pc.hbg .cap," + O + ".pc.hbg .q," + O + ".pc.hbg .q small," + O + ".pc.hbg .ft," + O + ".pc.hbg .spl," + O + ".pc.hbg .big .a{opacity:1;}" +
+      O + ".pc.gl .cap," + O + ".pc.gl .q small," + O + ".pc.gl .ft," + O + ".pc.gl .spl{color:rgba(255,255,255,.86);}" + O + ".pc.gl .big .a{color:rgba(255,255,255,.72);}" + O + ".pc.gl .q{border-top-color:rgba(255,255,255,.45);}" +
+      O + ".pc.gd .cap," + O + ".pc.gd .q small," + O + ".pc.gd .ft," + O + ".pc.gd .spl{color:rgba(25,31,40,.78);}" + O + ".pc.gd .big .a{color:rgba(25,31,40,.6);}" + O + ".pc.gd .q{border-top-color:rgba(25,31,40,.3);}" +
+      O + ".pc.hbg [contenteditable].ph:empty:before{opacity:.7;}" +
+      /* 덮개가 주황이면 주황 글자·그래프는 고른 글자 색(밝게=흰색 · 어둡게=검정)으로 */
+      O + ".pc.accw.gl .k," + O + ".pc.accw.gl .big .b," + O + ".pc.accw.gl .fw .on{color:#fff!important;}" + O + ".pc.accw.gl .sp2 polyline{stroke:#fff;}" + O + ".pc.accw.gl .sp2 circle{stroke:#fff;}" + O + ".pc.accw.gl .sp2 circle:last-child{fill:#fff;}" + O + ".pc.accw.gl .at i.o{background:#fff;}" +
+      O + ".pc.accw.gd .k," + O + ".pc.accw.gd .big .b," + O + ".pc.accw.gd .fw .on{color:#191f28!important;}" + O + ".pc.accw.gd .sp2 polyline{stroke:#191f28;}" + O + ".pc.accw.gd .sp2 circle{stroke:#191f28;}" + O + ".pc.accw.gd .sp2 circle:last-child{fill:#191f28;}" + O + ".pc.accw.gd .at i.o{background:#191f28;}" +
       "@media (max-width:900px){" + O + ".gcl{flex-direction:column;}" + O + ".gcp{position:static;width:100%;flex-basis:auto;}}";
     document.head.appendChild(st);
   }
@@ -9483,7 +9490,7 @@ window.hideCalibration = async function() {
       (st.mode === "grad" ? '<div class="gcf' + (has ? "" : " off") + '"><label>그라디언트 방향</label><div class="row">' + [["to top", "아래가 진하게"], ["to bottom", "위가 진하게"], ["to right", "왼쪽이 진하게"]].map(function (x) { return '<button type="button" class="gcc' + on(st.dir === x[0]) + '" data-bgdir="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</div></div>' : '') +
       '<div class="gcf' + (has && st.mode !== "none" ? "" : " off") + '"><label>투명도 <span data-bgopv style="color:#8b95a1;font-weight:600;margin-left:4px;">' + st.op + '%</span></label><input type="range" min="0" max="100" value="' + st.op + '" data-bgk="op"><div class="gcrv"><span>투명</span><span>진하게</span></div></div>' +
       '<div class="gcf' + (has ? "" : " off") + '"><label>글자 색</label><div class="row"><button type="button" class="gcc' + on(st.tx === "lt") + '" data-bgtx="lt">밝게</button><button type="button" class="gcc' + on(st.tx === "dk") + '" data-bgtx="dk">어둡게</button></div></div>' +
-      '<div class="gcpn">카드를 누르면 그 카드의 배경을 고를 수 있어요. 덮개를 주황으로 고르면 카드 속 주황 글자와 그래프는 흰색으로 바뀌어요. 배경 이미지는 저장되지 않아요.</div>';
+      '<div class="gcpn">카드를 누르면 그 카드의 배경을 고를 수 있어요. 덮개를 주황으로 고르면 카드 속 주황 글자와 그래프는 고른 글자 색으로 바뀌어요. 배경 이미지는 저장되지 않아요.</div>';
   }
   function bgRepaintSel() { var o = _$("wcGcOly"); if (!o) return; Array.prototype.forEach.call(o.querySelectorAll(".gcs .pc"), bgApply); }
   function bgRead(file) {   // 큰 사진은 긴 변 1600px 로 줄여서 씀
