@@ -5770,7 +5770,7 @@ window.hideCalibration = async function() {
     try { if (window.wcCnMarkCounts) window.wcCnMarkCounts(phone, host); } catch (e) {}   /* 11-05: 코멘트 개수 */
     try { if (window.wcReportFill) { var __rp = document.createElement("div"); __rp.id = "wcMemReport"; var __w = host.firstElementChild || host; __w.insertBefore(__rp, __w.firstChild); window.wcReportFill(__rp, phone, name); } } catch (e) { console.warn("[성장 리포트] 주입 실패", e); }   /* 11-05: 성장 리포트 */
     // 11-02: 향미 노트 성장 — 역량 성장(#wcMemGrowth) 바로 아래
-    try { var __ns = document.getElementById("wcMemNotesSlot"), __g = document.getElementById("wcMemGrowth"); if (__ns && __g && __g.parentNode) { __g.parentNode.insertBefore(__ns, __g.nextSibling); __ns.id = "wcMemNotes"; if (window.wcNoteGrowthFill) window.wcNoteGrowthFill(__ns, phone); } } catch (e) { console.warn("[향미 노트] 섹션 주입 실패", e); }
+    try { var __ns = document.getElementById("wcMemNotesSlot"), __g = document.getElementById("wcMemGrowth"); if (__ns && __g && __g.parentNode) { __g.parentNode.insertBefore(__ns, __g.nextSibling); __ns.id = "wcMemNotes"; if (window.wcNoteGrowthFill && !window.wcReportFill) window.wcNoteGrowthFill(__ns, phone); }   /* 11-05: 향미 노트는 성장 리포트 안으로 */ } catch (e) { console.warn("[향미 노트] 섹션 주입 실패", e); }
     // ── [B] 마스터-디테일 셸 + 좌측 레일 + 우측 패널(설문 최상단) ──
     try {
       var __app = await __wcFindApp(phone);
@@ -6548,6 +6548,7 @@ window.hideCalibration = async function() {
   }
   function __wcGrowthSectionHTML(m, filter) {
     if (!m) return emptyBox("성장 데이터가 아직 없어요. 커핑 세션·코칭 평가가 3회 이상 쌓이면 표시됩니다.");
+    if (typeof window.wcGrowthDomHTML === "function") return window.wcGrowthDomHTML(m, "__growth");   // 11-05: 성장 현황 펼침과 같은 모양
     filter = filter || "all";
     var doms = m.doms || {}, ent = m.entries || {};
     var chips = __wcGChips(filter);
@@ -6979,21 +6980,22 @@ window.hideCalibration = async function() {
   function mmdd(s) { var d = new Date(s); return isNaN(d) ? "" : (String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0")); }
   function scoreBadge(v) { return '<span style="flex-shrink:0;font-size:10.5px;font-weight:800;color:#ff7900;background:#fff3e9;border-radius:6px;padding:2px 6px;line-height:1.4;">' + v + '/10</span>'; }
   // 코멘트 한 줄: 날짜 · 점수 · 코멘트
-  function cnLine(e) {
+  function cnLine(e, scope) {
+    var SC = "\'" + (scope || "__rank") + "\'";   // 11-05: 멤버 상세에서도 같은 행(__growth)
     var note = e.note ? esc(e.note) : '<span style="color:#8b95a1;">코멘트 없음</span>';
     // 10-28: 성장 현황에서도 공개·수정·삭제 (멤버 상세와 같은 coach_notes 행 · 같은 함수)
     var idq = "'" + String(e.id == null ? "" : e.id).replace(/['"]/g, "") + "'", vis = !!e.visible;
     var acts = e.id != null ? '<span class="cnActs" style="flex-shrink:0;display:inline-flex;align-items:center;gap:8px;">' +
-      '<button type="button" onclick="window.memCoachVis(' + idq + ',' + vis + ',\'__rank\')" title="' + (vis ? "멤버에게 공개 중 · 클릭하면 비공개" : "비공개 · 클릭하면 멤버 공개") + '" style="border:1px solid ' + (vis ? "#c7ead7" : "#e5e8eb") + ';background:' + (vis ? "#eafbf1" : "#f4f5f7") + ';color:' + (vis ? "#00996b" : "#8b95a1") + ';border-radius:6px;font-size:10.5px;font-weight:700;padding:3px 8px;cursor:pointer;flex-shrink:0;">' + (vis ? "공개" : "비공개") + '</button>' +
-      '<button type="button" onclick="window.memCoachEdit(this,' + idq + ',\'__rank\')" style="border:none;background:none;color:#4e5968;font-size:12px;font-weight:700;cursor:pointer;padding:0;">수정</button>' +
-      '<button type="button" onclick="window.memCoachDelete(' + idq + ',\'__rank\')" style="border:none;background:none;color:#f04452;font-size:12px;font-weight:700;cursor:pointer;padding:0;">삭제</button></span>' : '';
+      '<button type="button" onclick="window.memCoachVis(' + idq + ',' + vis + ',' + SC + ')" title="' + (vis ? "멤버에게 공개 중 · 클릭하면 비공개" : "비공개 · 클릭하면 멤버 공개") + '" style="border:1px solid ' + (vis ? "#c7ead7" : "#e5e8eb") + ';background:' + (vis ? "#eafbf1" : "#f4f5f7") + ';color:' + (vis ? "#00996b" : "#8b95a1") + ';border-radius:6px;font-size:10.5px;font-weight:700;padding:3px 8px;cursor:pointer;flex-shrink:0;">' + (vis ? "공개" : "비공개") + '</button>' +
+      '<button type="button" onclick="window.memCoachEdit(this,' + idq + ',' + SC + ')" style="border:none;background:none;color:#4e5968;font-size:12px;font-weight:700;cursor:pointer;padding:0;">수정</button>' +
+      '<button type="button" onclick="window.memCoachDelete(' + idq + ',' + SC + ')" style="border:none;background:none;color:#f04452;font-size:12px;font-weight:700;cursor:pointer;padding:0;">삭제</button></span>' : '';
     return '<div class="cnItem cnLine" style="display:flex;align-items:flex-start;gap:8px;padding:7px 0 0;">' +
       '<span style="flex-shrink:0;width:34px;font-size:11.5px;color:#8b95a1;font-weight:600;padding-top:2px;">' + mmdd(e.at) + '</span>' +
       (e.score != null ? scoreBadge(e.score) : '') +
       '<span style="flex:1;min-width:0;"><span class="cnNote" data-raw="' + esc(e.note || "") + '" style="display:block;font-size:13px;color:#4e5968;line-height:1.55;word-break:break-word;white-space:pre-wrap;">' + note + '</span></span>' + acts + '</div>';
   }
   // 펼침용 역량 추이 행 — 라벨 · 그래프 · 수치를 왼쪽에 한 묶음으로, 코멘트는 그래프 시작선에 맞춤
-  function domRow(dom, d, entries) {
+  function domRow(dom, d, entries, scope) {
     entries = entries || [];
     var label = function (sub, subColor) {
       return '<div class="wcgr-dom-l"><div style="font-size:13px;font-weight:800;color:#191f28;">' + dom + '</div>' +
@@ -7013,7 +7015,7 @@ window.hideCalibration = async function() {
       head = '<div class="wcgr-dom-h">' + label() +
         '<span style="font-size:12.5px;color:#8b95a1;font-weight:600;">3회 미만 · 추이 미집계</span></div>';
     }
-    var comments = entries.length ? entries.map(cnLine).join("")
+    var comments = entries.length ? entries.map(function (e) { return cnLine(e, scope); }).join("")
       : '<div style="padding:7px 0 0;font-size:12.5px;color:#8b95a1;font-weight:600;line-height:1.55;">' +
         ((dom === "센서리" && d && d.src === "객관")
           ? '점수는 커핑 정확도로 자동 집계돼요. 교육 매니저 코멘트는 아직 없어요.'
@@ -7034,7 +7036,7 @@ window.hideCalibration = async function() {
       : '<span style="width:20px;flex-shrink:0;"></span>';
     var deltaLine = DOMAINS.map(function (dom) { return domDelta(dom, doms[dom]); }).join('<span style="color:#cbd2d9;margin:0 7px;">·</span>');
     var ent = m.entries || {};
-    var detail = DOMAINS.map(function (dom) { return domRow(dom, doms[dom], ent[dom]); }).join("");
+    var detail = DOMAINS.map(function (dom) { return domRow(dom, doms[dom], ent[dom]); }).join("");   // 역량 추이 — 멤버 상세도 같은 모양(wcGrowthDomHTML)
     return '<div class="wcgr-card" data-phone="' + esc(m.phone) + '" data-name="' + esc(m.name) + '" style="border-bottom:1px solid #f2f4f6;">' +
       '<div class="wcgr-head" style="display:flex;align-items:center;gap:13px;padding:15px 4px;cursor:pointer;">' +
         rankHtml +
@@ -7064,6 +7066,13 @@ window.hideCalibration = async function() {
         '</div>' +
       '</div></div>';
   }
+  /* 11-05: 멤버 상세 '역량 추이'도 성장 현황 펼침과 같은 모양으로 */
+  window.wcGrowthDomHTML = function (m, scope) {
+    ensureStyle();
+    var doms = (m && m.doms) || {}, ent = (m && m.entries) || {};
+    return '<div class="wcgr-sec wcgr-sec-md"><div class="wcgr-sec-t">역량 추이</div>' + DOMAINS.map(function (dom) { return domRow(dom, doms[dom], ent[dom], scope); }).join("") +
+      '<div style="margin-top:12px;font-size:11.5px;color:#8b95a1;line-height:1.6;">개선폭 = 최근 − 초기 구간 평균 · 3회↑만 반영 · <span style="color:#3182f6;font-weight:700;">객관</span> 커핑 편차 · <span style="color:#ff7900;font-weight:700;">매니저</span> 평가 점수</div></div>';
+  };
   function skillQualifies(m) { return _skillFilter === "all" ? m.enough : !!(m.doms && m.doms[_skillFilter]); }
   function sortVal(m) { return _skillFilter === "all" ? (m.score == null ? -1e9 : m.score) : (m.doms[_skillFilter] ? m.doms[_skillFilter].improve : -1e9); }
   function levelVal(m) { return _skillFilter === "all" ? (m.level || 0) : (m.doms[_skillFilter] ? m.doms[_skillFilter].level : 0); }
@@ -7282,14 +7291,14 @@ window.hideCalibration = async function() {
     window.__wcNoteSum = null;
     window.wcNoteBulk().then(function (m) { window.__wcNoteSum = m || {}; paintChk(); }, function () { window.__wcNoteSum = {}; paintChk(); });
   }
-  /* 11-05: 가입 첫 4주 → 최근 4주 한 줄 (커핑 14 · wcGrowthExtra) — 좋아지면 초록, 그대로·나빠지면 회색 */
+  /* 11-05: 첫 4주 → 마지막 4주 한 줄 (커핑 14 · wcGrowthExtra) — 좋아지면 초록, 그대로·나빠지면 회색 */
   var XLONG = '기록이 8주 이상인 멤버만';
   var XMODES = {
-    h: { t: "레퍼런스 컵노트 적중", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "가입 후 첫 4주와 최근 4주를 비교해요 · " + XLONG, long: 1, empty: "비교할 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 레퍼런스 컵노트 기록이 없는 멤버",
+    h: { t: "레퍼런스 컵노트 적중", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "첫 4주와 마지막 4주를 비교해요 · " + XLONG, long: 1, empty: "비교할 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 레퍼런스 컵노트 기록이 없는 멤버",
       val: function (x) { var k = x.hit; return (k && k.e != null && k.r != null) ? k.r - k.e : null; } },
-    s: { t: "센서리 정확도", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "가입 후 첫 4주와 최근 4주의 센서리 편차를 비교해요 · 편차가 줄어든 만큼 위로 · " + XLONG, long: 1, empty: "비교할 센서리 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 센서리 기록이 없는 멤버",
+    s: { t: "센서리 정확도", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "첫 4주와 마지막 4주의 센서리 편차를 비교해요 · 편차가 줄어든 만큼 위로 · " + XLONG, long: 1, empty: "비교할 센서리 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 센서리 기록이 없는 멤버",
       val: function (x) { var k = x.sens; return (k && k.e != null && k.r != null) ? k.e - k.r : null; } },
-    k: { t: "역량 점수", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "가입 후 첫 4주와 최근 4주의 교육 매니저 점수를 비교해요 · 가장 많이 오른 역량 기준 · " + XLONG, long: 1, empty: "비교할 역량 점수가 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 두 구간 모두에 점수가 없는 멤버",
+    k: { t: "역량 점수", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "첫 4주와 마지막 4주의 교육 매니저 점수를 비교해요 · 가장 많이 오른 역량 기준 · " + XLONG, long: 1, empty: "비교할 역량 점수가 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 두 구간 모두에 점수가 없는 멤버",
       val: function (x) { return x.sc ? x.sc.imp : null; } },
     r: { t: "해결된 코칭", tail: "이 많은 순으로 정렬했어요.", sub: "코칭 코멘트에 '해결됨'을 표시한 건수예요", long: 0, empty: "아직 해결된 코칭이 없어요. 코멘트에서 '해결됨'을 누르면 여기 잡혀요.", left: "해결된 코칭이 없는 멤버",
       val: function (x) { return x.res || null; } }
@@ -7298,7 +7307,7 @@ window.hideCalibration = async function() {
   function xmd(t) { var d = new Date(t), W = ["일", "월", "화", "수", "목", "금", "토"]; return String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + W[d.getDay()] + ")"; }
   function exLineHTML(ph) {
     var X = window.wcGrowthExtra; if (!X) return "";
-    var x = X.get(ph); if (x === null) return '<span class="it">첫 4주 → 최근 4주 불러오는 중…</span>';
+    var x = X.get(ph); if (x === null) return '<span class="it">첫 4주 → 마지막 4주 불러오는 중…</span>';
     var S = '<span class="sep">·</span>', out = [], M = '<span class="m">—</span>';
     var pair = function (k, f, lower, u) {
       if (!k || k.e == null || k.r == null) return M;
@@ -7691,7 +7700,9 @@ window.hideCalibration = async function() {
       mainBox.innerHTML = mainHTML(d);
       side.innerHTML = sideHTML(d, key);
       var nb = card.querySelector(".wcgr-notes");
-      if (nb && window.wcNoteGrowthFill) window.wcNoteGrowthFill(nb, key, { sessions: true });   // 11-02: 향미 노트 성장 + 최근 커핑(누르면 커핑 기록 그 회차로)
+      if (nb && window.wcNoteGrowthFill) window.wcNoteGrowthFill(nb, key, { sessions: true, noNotes: !!window.wcReportFill });   // 11-02: 최근 커핑(누르면 커핑 기록 그 회차로) · 11-05: 향미 노트는 성장 리포트로
+      var mn = card.querySelector(".wcgr-main");   // 11-05: 멤버 상세와 같은 성장 리포트
+      if (mn && window.wcReportFill && !mn.querySelector(".wcRepHost")) { var rp = document.createElement("div"); mn.insertBefore(rp, mn.firstChild); window.wcReportFill(rp, key, card.getAttribute("data-name") || ""); }
     } catch (e) {
       console.warn("[growth] 멤버 내역 렌더 실패", e);
       if (document.body.contains(side)) side.innerHTML = '<div class="wcgr-empty">멤버 정보를 불러오지 못했어요.</div>';
@@ -8849,7 +8860,7 @@ window.hideCalibration = async function() {
     try {
       var v = await noteData(phone), c = computeNotes(v);
       if (!document.body.contains(el)) return;
-      el.innerHTML = (c.recs.length ? notesHTML(c) : "") + (opt && opt.sessions ? sessListHTML(v) : "");
+      el.innerHTML = (c.recs.length && !(opt && opt.noNotes) ? notesHTML(c) : "") + (opt && opt.sessions ? sessListHTML(v) : "");
     } catch (e) { console.warn("[향미 노트] 불러오기 실패", e); if (document.body.contains(el)) el.innerHTML = ""; }
   };
   // 커핑 기록 탭으로 가서 그 회차·원두를 열고, 그 멤버 상세를 펼쳐 잠깐 강조
@@ -8900,7 +8911,7 @@ window.hideCalibration = async function() {
 
 /* ═══════════════════════════════════════════════════════════
    WeCoffee Admin · 커핑 14 — 성장 리포트 · 멤버별 성장 지표 · 성장 카드 (11-05)
-   · 멤버 상세 맨 위 #wcMemReport : 비교(가입 첫 4주 → 최근 4주 / 지난달 → 이번 달)
+   · 멤버 상세 맨 위 #wcMemReport : 비교(첫 4주 → 마지막 4주 · 마지막 기록 기준 / 지난달 → 이번 달) · 성장 현황 펼침에도 같은 블록
        레퍼런스 컵노트 중 짚은 비율 · 센서리 정확도 편차 · 한 컵에 적은 노트 수 · 역량 점수
        레퍼런스 컵노트 적중 추이 · 해결된 코칭(코멘트 '해결됨' · SQL 30) · 해당 멤버의 성장 과정 카드로 보기
    · 성장 현황 › 멤버별 성장 : window.wcGrowthExtra (레퍼런스 컵노트 적중 · 해결된 코칭) — 정렬·한 줄·성장 카드 버튼
@@ -8956,15 +8967,17 @@ window.hideCalibration = async function() {
   function beanNames(res) { return (Array.isArray(res && res.plan_beans) ? res.plan_beans : []).map(function (b) { return String(b && b.name || "").trim(); }).filter(Boolean); }
 
   /* ── 비교 구간 ── */
-  function windows(mode, t0, now) {
+  function windows(mode, t0, now, tl) {
     if (mode === "m") {
       var d = new Date(now), a = new Date(d.getFullYear(), d.getMonth(), 1).getTime(), pa = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
       return { e0: pa, e1: a, r0: a, r1: now + 1, eLbl: "지난달", rLbl: "이번 달" };
     }
-    return { e0: t0, e1: t0 + WIN, r0: Math.max(t0 + WIN, now - WIN), r1: now + 1, eLbl: "가입 첫 4주", rLbl: "최근 4주" };
+    tl = tl || now;   // 11-05: 마지막 4주 = 그 멤버의 마지막 기록부터 거꾸로 4주
+    return { e0: t0, e1: t0 + WIN, r0: tl - WIN + 1, r1: tl + 1, eLbl: "첫 4주", rLbl: "마지막 4주" };
   }
-  function inWin(pts, a, b) { return avg(pts.filter(function (p) { return p.at >= a && p.at < b; }).map(function (p) { return p.v; })); }
-  function cmp(pts, w) { var e = inWin(pts, w.e0, w.e1), r = inWin(pts, w.r0, w.r1); return { e: e, r: r, n: pts.length }; }
+  function inWin(pts, a, b) { var l = pts.filter(function (p) { return p.at >= a && p.at < b; }); return { v: avg(l.map(function (p) { return p.v; })), n: l.length }; }
+  function cmp(pts, w) { var e = inWin(pts, w.e0, w.e1), r = inWin(pts, w.r0, w.r1); return { e: e.v, r: r.v, n: pts.length, ne: e.n, nr: r.n }; }
+  function devToAcc(v) { return Math.max(0, Math.min(10, 10 - Number(v) * 1.5)); }   // 성장 현황과 같은 환산(편차 → 정확도 10점)
 
   /* ── 멤버 한 명의 성장 데이터 ── */
   var _rep = {};
@@ -8982,14 +8995,15 @@ window.hideCalibration = async function() {
     notes.forEach(function (n) { if (n.score == null || !n.eval_domain) return; (score[n.eval_domain] = score[n.eval_domain] || []).push({ at: ts(n.created_at), v: Number(n.score) }); });
     var res = await reservationsOf(d);
     var all = [].concat(hit, sens, cnt).map(function (p) { return p.at; }).concat(notes.map(function (n) { return ts(n.created_at); })).filter(Boolean);
-    var t0 = all.length ? Math.min.apply(null, all) : 0;
-    var out = { phone: d, hit: hit, cnt: cnt, sens: sens, score: score, notes: notes, res: res, t0: t0, cupN: Object.keys(perSess).length, nd: nd, c: c };
+    var t0 = all.length ? Math.min.apply(null, all) : 0, t1 = all.length ? Math.max.apply(null, all) : 0;
+    var acc = sens.map(function (p) { return { at: p.at, v: devToAcc(p.v) }; });
+    var out = { phone: d, hit: hit, cnt: cnt, sens: sens, acc: acc, score: score, notes: notes, res: res, t0: t0, t1: t1, cupN: Object.keys(perSess).length, nd: nd, c: c };
     _rep[d] = out;
     return out;
   }
   function bestScore(score, w) {
     var best = null;
-    Object.keys(score).forEach(function (dom) { var k = cmp(score[dom], w); if (k.e == null || k.r == null) return; var imp = k.r - k.e; if (!best || imp > best.imp) best = { dom: dom, e: k.e, r: k.r, imp: imp }; });
+    Object.keys(score).forEach(function (dom) { var k = cmp(score[dom], w); if (k.e == null || k.r == null) return; var imp = k.r - k.e; if (!best || imp > best.imp) best = { dom: dom, e: k.e, r: k.r, imp: imp, ne: k.ne, nr: k.nr }; });
     return best;
   }
   /* 해결된 코칭: 원래 코멘트 → (예약 코멘트면) 같은 생두 로스팅·커핑 횟수 → 해결 */
@@ -9058,12 +9072,16 @@ window.hideCalibration = async function() {
       ".wrp-chips{display:flex;gap:6px;flex-wrap:wrap;}",
       ".wrp-chip{height:32px;padding:0 12px;border:1px solid #e5e8eb;border-radius:999px;background:#fff;font-family:inherit;font-size:12.5px;font-weight:700;color:#4e5968;cursor:pointer;}",
       ".wrp-chip.on{border-color:#ff7900;color:#e86d00;}",
-      ".wrp-m{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}",
+      ".wrp-m{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;}",
+      ".wrp-per{font-size:12px;color:#8b95a1;margin:-4px 0 12px;line-height:1.6;}",
+      ".wrp-c .c{font-size:11.5px;color:#b0b8c1;font-weight:600;}",
+      ".wrp-grp{margin-bottom:14px;}.wrp-grp:last-child{margin-bottom:0;}.wrp-grp b{display:block;font-size:13px;font-weight:800;color:#191f28;margin-bottom:2px;}.wrp-grp small{display:block;font-size:12px;color:#8b95a1;margin-bottom:8px;}",
+      ".wrp-cps{display:flex;flex-wrap:wrap;gap:6px;}.wrp-cp{border:1px solid #e5e8eb;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:600;color:#191f28;}.wrp-cp i{font-style:normal;color:#8b95a1;margin-left:4px;font-weight:500;}.wrp-cp.g{color:#00996b;border-color:#c7ead7;}",
       ".wrp-c{border:1px solid #e5e8eb;border-radius:14px;padding:14px 16px;background:#fff;min-width:0;}",
       ".wrp-c .l{font-size:12.5px;color:#8b95a1;font-weight:600;}",
       ".wrp-c .v{display:flex;align-items:baseline;gap:8px;margin-top:8px;flex-wrap:wrap;}",
       ".wrp-c .a{font-size:17px;font-weight:700;color:#8b95a1;}.wrp-c .ar{color:#b0b8c1;font-size:13px;}.wrp-c .b{font-size:26px;font-weight:800;color:#191f28;letter-spacing:-.02em;}",
-      ".wrp-c .d{font-size:12.5px;font-weight:800;color:#e86d00;margin-left:auto;}.wrp-c .d.n{color:#8b95a1;}",
+      ".wrp-c .v{gap:6px;}.wrp-c .d{font-size:12.5px;font-weight:800;color:#00b386;margin-top:4px;}.wrp-c .d.n{color:#8b95a1;}",
       ".wrp-c .s{font-size:11.5px;color:#8b95a1;margin-top:6px;}",
       ".wrp-c .em{font-size:13px;color:#b0b8c1;margin-top:10px;}",
       ".wrp-t{display:flex;justify-content:space-between;align-items:baseline;margin:18px 0 8px;}.wrp-t b{font-size:13.5px;font-weight:800;color:#191f28;}.wrp-t span{font-size:11.5px;color:#8b95a1;}",
@@ -9080,7 +9098,7 @@ window.hideCalibration = async function() {
       ".wrp-btn{height:38px;padding:0 16px;border:none;border-radius:10px;background:#ff7900;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;}",
       ".wrp-btn:disabled{opacity:.4;cursor:default;}",
       ".wrp-em{padding:16px 0;text-align:center;color:#8b95a1;font-size:13px;}",
-      "@media (max-width:640px){.wrp-m{grid-template-columns:1fr;}}"
+      "@media (max-width:460px){.wrp-m{grid-template-columns:1fr;}}"
     ].join("");
     document.head.appendChild(st);
   }
@@ -9089,11 +9107,34 @@ window.hideCalibration = async function() {
   var _repMode = {};
   function metricCard(label, k, opt) {
     opt = opt || {};
-    if (k.e == null || k.r == null) return '<div class="wrp-c"><div class="l">' + label + '</div><div class="em">' + (k.n ? '두 구간 모두에 기록이 있어야 비교할 수 있어요' : '아직 기록이 없어요') + '</div></div>';
-    var f = opt.fmt || function (v) { return String(r1(v)); };
+    var f = opt.fmt || function (v) { return String(r1(v)); }, w = opt.w || {};
+    var cn = function (n) { return opt.noCnt ? "" : '<span class="c">(' + (n || 0) + '회)</span>'; };
+    var sub = opt.sub ? '<div class="s">' + opt.sub + '</div>' : '';
+    if (k.e == null && k.r == null) return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="em">아직 기록이 없어요</div>' + (k.n ? '' : '') + '</div>';
+    if (k.e == null || k.r == null) {
+      var miss = k.e == null ? w.eLbl : w.rLbl;
+      return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="v"><span class="a">' + (k.e == null ? '—' : f(k.e)) + '</span>' + (k.e == null ? '' : cn(k.ne)) + '<span class="ar">→</span><span class="b">' + (k.r == null ? '—' : f(k.r)) + '</span>' + (k.r == null ? '' : cn(k.nr)) + '</div><div class="s">' + esc((miss || "한 구간") + " 기록이 없어요") + '</div></div>';
+    }
     var diff = k.r - k.e, good = opt.lower ? diff < 0 : diff > 0;
-    var dt = opt.lower ? (Math.abs(r1(diff)) + " " + (diff < 0 ? "줄어듦" : "늘어남")) : ((diff > 0 ? "+" : "") + (opt.dfmt ? opt.dfmt(diff) : r1(diff)));
-    return '<div class="wrp-c"><div class="l">' + label + '</div><div class="v"><span class="a">' + f(k.e) + '</span><span class="ar">→</span><span class="b">' + f(k.r) + '</span><span class="d' + (good ? "" : " n") + '">' + esc(dt) + '</span></div><div class="s">' + esc(opt.sub || "") + '</div></div>';
+    var dt = (diff > 0 ? "+" : "") + (opt.dfmt ? opt.dfmt(diff) : r1(diff));
+    return '<div class="wrp-c"><div class="l">' + esc(label) + '</div><div class="v"><span class="a">' + f(k.e) + '</span>' + cn(k.ne) + '<span class="ar">→</span><span class="b">' + f(k.r) + '</span>' + cn(k.nr) + '</div>' +
+      '<div class="d' + (good ? "" : " n") + '">' + esc(dt) + '</div>' + sub + '</div>';
+  }
+  function vocabOf(g, w) {   // 표현 범위: 지금까지 쓴 노트 표현 · 비교 뒤 구간에 처음 쓴 것
+    var seen = {};
+    ((g.c && g.c.recs) || []).forEach(function (x) { (x.notes || []).forEach(function (n) { var k = nk(n); if (k && (!seen[k] || x.at < seen[k].at)) seen[k] = { label: n, at: x.at }; }); });
+    var all = Object.keys(seen).map(function (k) { return seen[k]; }).filter(function (s) { return s.at < w.r1; });
+    var before = all.filter(function (s) { return s.at < w.r0; }).length;
+    var fresh = all.filter(function (s) { return s.at >= w.r0; }).sort(function (a, b) { return b.at - a.at; });
+    return { total: all.length, before: before, fresh: fresh };
+  }
+  function noteGroupsHTML(g, w) {
+    var c = g.c || {}, vb = vocabOf(g, w), CH = function (t, sub, cls) { return '<span class="wrp-cp' + (cls ? " " + cls : "") + '">' + esc(t) + (sub ? '<i>' + esc(sub) + '</i>' : '') + '</span>'; }, gs = [];
+    if ((c.missed || []).length) gs.push(['계속 놓치는 노트', '레퍼런스에 3번 이상 나왔는데 한 번도 못 짚은 노트', c.missed.map(function (m) { return CH(m.label, m.n + "번"); }).join("")]);
+    if ((c.late || []).length) gs.push(['늦게 찾은 노트', '처음엔 놓치다가 짚기 시작한 노트', c.late.map(function (l) { return CH(l.label, mdw(l.at)); }).join("")]);
+    if (vb.fresh.length) gs.push(['최근 처음 쓴 노트', w.rLbl + ' 동안 처음 쓴 표현', vb.fresh.slice(0, 14).map(function (x) { return CH(x.label, "", "g"); }).join("")]);
+    if (!gs.length) return "";
+    return '<div class="wrp-t"><b>향미 노트</b><span>레퍼런스 컵노트와 비교</span></div><div class="wrp-box">' + gs.map(function (x) { return '<div class="wrp-grp"><b>' + x[0] + '</b><small>' + x[1] + '</small><div class="wrp-cps">' + x[2] + '</div></div>'; }).join("") + '</div>';
   }
   function trendSVG(pts) {
     var W = 700, H = 160, L = 36, R = 16, T = 12, B = 26, h = "";
@@ -9120,21 +9161,29 @@ window.hideCalibration = async function() {
     }).join("");
   }
   function paintReport(el, g, name) {
-    var mode = _repMode[g.phone] || "j", now = Date.now(), w = windows(mode, g.t0, now);
+    var mode = _repMode[g.phone] || "j", now = Date.now(), w = windows(mode, g.t0, now, g.t1);
     var noData = !g.hit.length && !g.sens.length && !g.cnt.length && !Object.keys(g.score).length;
-    var span = g.t0 ? now - g.t0 : 0;
-    var h = '<div class="wrp-h"><b>성장 리포트</b><div class="wrp-chips"><button type="button" class="wrp-chip' + (mode === "j" ? " on" : "") + '" data-wrpm="j">가입 첫 4주 → 최근 4주</button><button type="button" class="wrp-chip' + (mode === "m" ? " on" : "") + '" data-wrpm="m">지난달 → 이번 달</button></div></div>';
+    var h = '<div class="wrp-h"><b>성장 리포트</b><div class="wrp-chips"><button type="button" class="wrp-chip' + (mode === "j" ? " on" : "") + '" data-wrpm="j">첫 4주 → 마지막 4주</button><button type="button" class="wrp-chip' + (mode === "m" ? " on" : "") + '" data-wrpm="m">지난달 → 이번 달</button></div></div>';
     if (noData) { el.innerHTML = h + '<div class="wrp-box"><div class="wrp-em">커핑·코칭 기록이 쌓이면 여기서 성장을 비교해 볼 수 있어요.</div></div>'; return; }
-    if (mode === "j" && span < 2 * WIN) h += '<div style="font-size:12px;color:#8b95a1;margin:-4px 0 10px;">기록이 8주보다 짧아서 두 구간이 겹칠 수 있어요.</div>';
-    var sc = bestScore(g.score, w);
-    var hitK = cmp(g.hit, w);
+    var per = mode === "j"
+      ? "첫 4주 " + mdw(w.e0) + " ~ " + mdw(w.e1 - DAY) + " · 마지막 4주 " + mdw(w.r0) + " ~ " + mdw(w.r1 - 1) + " · 마지막 기록 기준" + (w.r0 < w.e1 ? " · 기록이 8주보다 짧아서 두 구간이 겹쳐요" : "")
+      : "지난달 " + mdw(w.e0) + " ~ " + mdw(w.e1 - DAY) + " · 이번 달 " + mdw(w.r0) + " ~ 오늘";
+    h += '<div class="wrp-per">' + esc(per) + '</div>';
+    var sc = bestScore(g.score, w), sk = cmp(g.sens, w), vb = vocabOf(g, w);
+    var resN = g.notes.filter(function (n) { var t = ts(n.resolved_at); return t && (mode === "j" || (t >= w.r0 && t < w.r1)); });
+    var resDom = {}; resN.forEach(function (n) { var k = n.eval_domain || "기타"; resDom[k] = (resDom[k] || 0) + 1; });
     h += '<div class="wrp-m">' +
-      metricCard("레퍼런스 컵노트 중 짚은 비율", hitK, { fmt: function (v) { return Math.round(v) + "%"; }, dfmt: function (d) { return Math.round(d) + "%p"; }, sub: "커핑 " + g.hit.length + "회 기준" }) +
-      metricCard("센서리 정확도 편차", cmp(g.sens, w), { lower: true, sub: "레퍼런스 점수와의 차이 · 낮을수록 정확해요" }) +
-      metricCard("한 컵에 적은 노트 수", cmp(g.cnt, w), { fmt: function (v) { return r1(v) + "개"; }, dfmt: function (d) { return r1(d) + "개"; }, sub: "평균" }) +
-      (sc ? metricCard("역량 점수 · " + sc.dom, { e: sc.e, r: sc.r, n: 1 }, { sub: "교육 매니저 성장 평가 · 10점 만점" }) : metricCard("역량 점수", { e: null, r: null, n: Object.keys(g.score).length })) +
+      metricCard("레퍼런스 컵노트 중 짚은 비율", cmp(g.hit, w), { w: w, fmt: function (v) { return Math.round(v) + "%"; }, dfmt: function (d) { return Math.round(d) + "%p"; }, sub: "커핑 " + g.hit.length + "회 기준" }) +
+      metricCard("센서리 정확도", cmp(g.acc, w), { w: w, sub: (sk.e != null && sk.r != null) ? "편차 " + r1(sk.e) + " → " + r1(sk.r) + " · 레퍼런스 점수와의 차이" + (sk.r < sk.e ? "가 줄었어요" : "") : "10점 만점 · 커핑 편차로 계산" }) +
+      (sc ? metricCard("역량 점수 · " + sc.dom, { e: sc.e, r: sc.r, n: 1, ne: sc.ne, nr: sc.nr }, { w: w, sub: "교육 매니저 성장 평가 · 10점 만점" })
+          : '<div class="wrp-c"><div class="l">역량 점수</div><div class="em">' + (Object.keys(g.score).length ? '두 구간 모두에 교육 매니저 점수가 있어야 비교돼요' : '아직 교육 매니저 점수가 없어요') + '</div></div>') +
+      metricCard("한 컵에 적은 노트 수", cmp(g.cnt, w), { w: w, fmt: function (v) { return r1(v) + "개"; }, dfmt: function (d) { return r1(d) + "개"; }, sub: "평균" }) +
+      (vb.total ? metricCard("표현 범위", { e: vb.before, r: vb.total, n: 1 }, { w: w, noCnt: 1, fmt: function (v) { return v + "가지"; }, dfmt: function (d) { return String(d); }, sub: "지금까지 쓴 노트 표현 · " + w.rLbl + "에 새로 쓴 것" })
+          : '<div class="wrp-c"><div class="l">표현 범위</div><div class="em">아직 기록이 없어요</div></div>') +
+      '<div class="wrp-c"><div class="l">해결된 코칭</div><div class="v"><span class="b">' + resN.length + '건</span></div><div class="s">' + (resN.length ? esc(Object.keys(resDom).map(function (k) { return k + " " + resDom[k] + "건"; }).join(" · ")) : (mode === "m" ? "이번 달 해결된 코칭이 없어요" : "코멘트에 '해결됨'을 누르면 잡혀요")) + '</div></div>' +
       '</div>';
     if (g.hit.length >= 2) h += '<div class="wrp-t"><b>레퍼런스 컵노트 적중 추이</b><span>커핑 회차별</span></div><div class="wrp-box">' + trendSVG(g.hit) + '</div>';
+    h += noteGroupsHTML(g, w);
     h += '<div class="wrp-t"><b>해결된 코칭</b><span>코멘트에 \'해결됨\'을 누르면 여기 모여요</span></div><div class="wrp-box" data-wrp-res>' + resolvedHTML(g.resolved) + '</div>';
     h += '<div class="wrp-foot"><button type="button" class="wrp-btn" data-wrp-card>해당 멤버의 성장 과정 카드로 보기</button></div>';
     el.innerHTML = h;
@@ -9143,7 +9192,7 @@ window.hideCalibration = async function() {
     if (!el || !sb()) return;
     style();
     el.innerHTML = '<div class="wrp-h"><b>성장 리포트</b></div><div class="wrp-box"><div class="wrp-em">불러오는 중…</div></div>';
-    el.setAttribute("data-phone", digits(phone));
+    el.setAttribute("data-phone", digits(phone)); el.classList.add("wcRepHost");
     el.onclick = function (e) {
       var m = e.target.closest("[data-wrpm]");
       if (m) { _repMode[digits(phone)] = m.getAttribute("data-wrpm"); var g0 = _rep[digits(phone)]; if (g0) paintReport(el, g0, name); return; }
@@ -9159,8 +9208,8 @@ window.hideCalibration = async function() {
     } catch (e) { console.warn("[성장 리포트] 불러오기 실패", e); if (document.body.contains(el)) el.innerHTML = ""; }
   };
   window.wcReportRefresh = function (phone) {
-    var el = _$("wcMemReport"); if (!el || el.getAttribute("data-phone") !== digits(phone)) return;
-    _sens.at = 0; window.wcReportFill(el, phone, (_rep[digits(phone)] || {}).name);
+    var ph = digits(phone), els = document.querySelectorAll('.wcRepHost[data-phone="' + ph + '"]'); if (!els.length) return;
+    _sens.at = 0; Array.prototype.forEach.call(els, function (el) { window.wcReportFill(el, ph, (_rep[ph] || {}).name); });
   };
 
   /* ═══ 2. 멤버별 성장용 지표 (11-05: 하이라이트 탭 대신 멤버별 성장에 합침) ═══
@@ -9193,7 +9242,7 @@ window.hideCalibration = async function() {
           var map = {};
           Object.keys(by).forEach(function (ph) {
             var o = by[ph], all = o.at.filter(Boolean); if (!all.length) { map[ph] = { res: o.res }; return; }
-            var t0 = Math.min.apply(null, all), t1 = Math.max.apply(null, all), w = windows("j", t0, now);
+            var t0 = Math.min.apply(null, all), t1 = Math.max.apply(null, all), w = windows("j", t0, now, t1);
             map[ph] = { t0: t0, t1: t1, span: t1 - t0, hit: cmp(o.hit, w), sens: cmp(o.sens, w), sc: bestScore(o.score, w), res: o.res };
           });
           GX.map = map;
@@ -9288,7 +9337,7 @@ window.hideCalibration = async function() {
   function ed(cls, html, ph) { return '<div class="' + cls + (ph ? ' ph' : '') + '" contenteditable="true"' + (ph ? ' data-ph="' + esc(ph) + '"' : '') + '>' + (html || "") + '</div>'; }
   function foot() { return '<div class="ft"><span>커피 트레이닝 커뮤니티 위커피</span></div>'; }
   function sensoryData() {
-    var g = GC.g, w = windows("j", g.t0, Date.now()), k = cmp(g.hit, w), ck = cmp(g.cnt, w);
+    var g = GC.g, w = windows("j", g.t0, Date.now(), g.t1), k = cmp(g.hit, w), ck = cmp(g.cnt, w);
     if (k.e == null || k.r == null || g.hit.length < 2) return null;
     var first = g.hit[0].at, last = g.hit[g.hit.length - 1].at;
     // 전환점: 다음 회차에 적중이 가장 크게 오른 직전의 코멘트(센서리·세션·원두·멤버 코멘트)
