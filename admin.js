@@ -9397,15 +9397,36 @@ window.hideCalibration = async function() {
     for (var i = 1; i < g.hit.length; i++) { var d = g.hit[i].v - g.hit[i - 1].v; if (!jump || d > jump.d) jump = { d: d, a: g.hit[i - 1].at, b: g.hit[i].at }; }
     var turn = null;
     if (jump) g.notes.forEach(function (n) { var t = ts(n.created_at); if (t <= jump.b && t >= first && (n.eval_domain === "센서리" || ["session", "bean", "member"].indexOf(n.scope) >= 0)) { if (!turn || t > ts(turn.created_at)) turn = n; } });
-    return { e: Math.round(k.e), r: Math.round(k.r), ce: ck.e, cr: ck.r, weeks: weeksTxt(first, last), cups: g.hit.length, coach: g.notes.length, turn: turn, firstAt: first, lastAt: last };
+    return { e: Math.round(k.e), r: Math.round(k.r), ce: ck.e, cr: ck.r, weeks: weeksTxt(first, last), cups: g.hit.length, coach: g.notes.length, turn: turn, firstAt: first, lastAt: last, grew: Math.round(k.r) - Math.round(k.e) >= GROW.hit };
+  }
+  /* 11-05: 성장 카드는 눈에 띄게 늘어난 지표로만 — 기준 미달이면 카드를 만들지 않음 */
+  var GROW = { hit: 5, acc: 0.5, voc: 3 };   // 레퍼런스 컵노트 +5%p · 센서리 정확도 +0.5 · 표현 범위 +3가지
+  function vocabSeries(g) {   // 커핑 회차마다 지금까지 쓴 표현 가짓수(누적)
+    var by = {}; ((g.c && g.c.recs) || []).forEach(function (x) { (by[x.sid] = by[x.sid] || { at: x.at, n: [] }).n = by[x.sid].n.concat(x.notes || []); });
+    var seen = {}; return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return a.at - b.at; }).map(function (x) { x.n.forEach(function (t) { var q = nk(t); if (q) seen[q] = 1; }); return { at: x.at, v: Object.keys(seen).length }; });
+  }
+  function sensoryBest() {
+    var g = GC.g, w = windows("j", g.t0, Date.now(), g.t1), cands = [];
+    var hd = sensoryData(); if (hd && hd.grew) cands.push({ type: "hit", sc: (hd.r - hd.e) / GROW.hit, d: hd });
+    var ak = cmp(g.acc || [], w);
+    if (ak.e != null && ak.r != null && r1(ak.r) - r1(ak.e) >= GROW.acc) { var aa = (g.acc || []).slice().sort(function (a, b) { return a.at - b.at; }); cands.push({ type: "acc", sc: (ak.r - ak.e) / GROW.acc, d: { e: r1(ak.e), r: r1(ak.r), pts: aa, firstAt: aa[0].at, lastAt: aa[aa.length - 1].at, weeks: weeksTxt(aa[0].at, aa[aa.length - 1].at), cups: aa.length } }); }
+    var vb = vocabOf(g, w), vs = vocabSeries(g);
+    if (vs.length >= 2 && vb.total - vb.before >= GROW.voc) cands.push({ type: "voc", sc: (vb.total - vb.before) / GROW.voc, d: { e: vb.before, r: vb.total, pts: vs, firstAt: vs[0].at, lastAt: vs[vs.length - 1].at, weeks: weeksTxt(vs[0].at, vs[vs.length - 1].at), cups: vs.length, lbl: vb.lbl } });
+    cands.sort(function (a, b) { return b.sc - a.sc; });
+    return cands[0] || null;
   }
   function ratioHead(e, r) { if (e > 0 && r / e >= 1.5) { var x = r / e; return "레퍼런스 컵노트를<br>" + (x >= 2.75 ? "세 배 가까이" : x >= 2.25 ? "두 배 넘게" : x >= 1.75 ? "두 배 가까이" : "1.5배") + " 더 짚게 됐어요"; } return "레퍼런스 컵노트를<br>" + e + "%에서 " + r + "%까지 짚게 됐어요"; }
-  function cardSensory(d) {
+  function cardSensory(best) {
+    var d = best.d, T = best.type;
+    var head = T === "hit" ? ratioHead(d.e, d.r) : (T === "acc" ? "센서리 정확도를<br>" + d.e + "에서 " + d.r + "까지 올렸어요" : "쓸 수 있는 향미 표현이<br>" + d.e + "가지에서 " + d.r + "가지로 늘었어요");
+    var pts = T === "hit" ? GC.g.hit : d.pts, u = T === "hit" ? "%" : (T === "voc" ? "가지" : "");
+    var cap = T === "hit" ? "레퍼런스 컵노트 중 짚은 비율 · " + d.weeks + " 동안 커핑 " + d.cups + "번"
+      : (T === "acc" ? "센서리 정확도 · 10점 만점 · " + d.weeks + " 동안 센서리 평가 " + d.cups + "번" : "지금까지 쓴 향미 표현 · " + d.weeks + " 동안 커핑 " + d.cups + "번");
     return '<div class="pc" data-name="센서리성장">' +
-      '<div class="lg">' + logoImg(false) + '</div><div class="k">센서리 성장</div>' + ed("hd", ratioHead(d.e, d.r)) +
-      '<div class="pr">' + spark(GC.g.hit) + '<div class="spl"><span>' + tick(d.firstAt) + '</span><span>' + tick(d.lastAt) + '</span></div></div>' +
-      '<div class="big"><span class="a">' + d.e + '%</span><span class="b">' + d.r + '%</span></div>' +
-      '<div class="cap">레퍼런스 컵노트 중 짚은 비율 · ' + d.weeks + ' 동안 커핑 ' + d.cups + '번</div>' +
+      '<div class="lg">' + logoImg(false) + '</div><div class="k">센서리 성장</div>' + ed("hd", head) +
+      '<div class="pr">' + spark(pts) + '<div class="spl"><span>' + tick(d.firstAt) + '</span><span>' + tick(d.lastAt) + '</span></div></div>' +
+      '<div class="big"><span class="a">' + d.e + u + '</span><span class="b">' + d.r + u + '</span></div>' +
+      '<div class="cap">' + cap + '</div>' +
       '<div class="q">' + ed("qq", "", "멤버 한마디를 적어 주세요 (비워 두면 빠져요)") + '<small>' + esc(who()) + ' 님</small></div>' + foot() + '</div>';
   }
   function roastData() {
@@ -9540,14 +9561,14 @@ window.hideCalibration = async function() {
   }
   function gcPaint() {
     var o = _$("wcGcOly"); if (!o) return;
-    var body = o.querySelector(".gcs"), sd = sensoryData(), rd = roastData(), pd = GC.peer;
+    var body = o.querySelector(".gcs"), sd = sensoryData(), sb2 = sensoryBest(), rd = roastData(), pd = GC.peer;
     o.querySelectorAll("[data-gcf]").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-gcf") === GC.fmt); });
     o.querySelectorAll("[data-gcm]").forEach(function (b) { b.classList.toggle("on", (b.getAttribute("data-gcm") === "1") === GC.mask); });
     body.classList.toggle("car", GC.fmt === "car");
     var h = "";
-    if (GC.fmt === "car") h = sd ? carousel(sd) : '<div class="gcem">레퍼런스 컵노트가 있는 커핑 기록이 2회 이상 있어야 만들 수 있어요.</div>';
+    if (GC.fmt === "car") h = (sd && sd.grew) ? carousel(sd) : '<div class="gcem">' + (sd ? '레퍼런스 컵노트 비율이 아직 눈에 띄게 오르지 않아서 넘겨 보기는 만들 수 없어요. (처음 3회보다 +' + GROW.hit + '%p 이상일 때 만들어요)' : '레퍼런스 컵노트가 있는 커핑 기록이 2회 이상 있어야 만들 수 있어요.') + '</div>';
     else {
-      if (sd) h += cardSensory(sd);
+      if (sb2) h += cardSensory(sb2);
       if (rd) h += cardRoast(rd);
       if (pd) h += cardPeer(pd);
       if (!h) h = '<div class="gcem">카드로 만들 기록이 아직 없어요. 커핑 기록 2회 이상, 해결된 코칭, 동료와 함께 한 커핑 중 하나가 있어야 해요.</div>';
@@ -9558,6 +9579,7 @@ window.hideCalibration = async function() {
     Array.prototype.forEach.call(body.querySelectorAll(".pc"), bgApply);
     bgPanel();
     var hint = [];
+    if (!sb2) hint.push("아직 눈에 띄게 늘어난 센서리 지표가 없어서 센서리 카드는 빠졌어요. (레퍼런스 컵노트 +" + GROW.hit + "%p · 센서리 정확도 +" + GROW.acc + " · 표현 범위 +" + GROW.voc + "가지 중 하나 이상)");
     if (!rd) hint.push("로스팅 코칭 카드는 코멘트에 '해결됨'을 표시하면 생겨요.");
     if (!pd) hint.push("함께 커핑 카드는 내가 볶은 원두를 다른 멤버가 평가한 커핑이 있으면 생겨요.");
     o.querySelector(".gcnote").innerHTML = "카드 속 제목과 따옴표 문장은 눌러서 고칠 수 있어요. 숫자와 날짜는 기록에서 가져와요." + (GC.fmt === "one" && hint.length ? "<br>" + esc(hint.join(" ")) : "");
