@@ -7092,7 +7092,7 @@ window.hideCalibration = async function() {
     return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:0;">' +
       '<select id="wcGrowthBatch" style="height:34px;border:1px solid #e5e8eb;border-radius:9px;font-size:12.5px;font-weight:700;padding:0 30px 0 12px;background:#fff url(data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2212%22%20height=%2212%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%238b95a1%22%20stroke-width=%222.4%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpolyline%20points=%226%209%2012%2015%2018%209%22/%3E%3C/svg%3E) no-repeat right 10px center;background-size:12px;color:#191f28;font-family:inherit;cursor:pointer;appearance:none;-webkit-appearance:none;-moz-appearance:none;">' + opts + '</select>' +
       '<div style="display:inline-flex;background:#f2f4f6;border-radius:10px;padding:3px;">' + seg + '</div>' +
-      '<select id="wcGrowthSort" style="' + selStyle() + 'margin-left:auto;"><option value="g"' + (_sortMode === "g" ? " selected" : "") + '>성장순</option><option value="h"' + (_sortMode === "h" ? " selected" : "") + '>레퍼런스 노트 적중 성장순</option><option value="r"' + (_sortMode === "r" ? " selected" : "") + '>해결된 코칭 많은 순</option><option value="c"' + (_sortMode === "c" ? " selected" : "") + '>확인한 지 오래된 순</option></select>' +
+      '<select id="wcGrowthSort" style="' + selStyle() + 'margin-left:auto;"><option value="g"' + (_sortMode === "g" ? " selected" : "") + '>성장순</option><option value="h"' + (_sortMode === "h" ? " selected" : "") + '>레퍼런스 노트 적중 성장순</option><option value="s"' + (_sortMode === "s" ? " selected" : "") + '>센서리 정확도 성장순</option><option value="k"' + (_sortMode === "k" ? " selected" : "") + '>역량 점수 성장순</option><option value="r"' + (_sortMode === "r" ? " selected" : "") + '>해결된 코칭 많은 순</option><option value="c"' + (_sortMode === "c" ? " selected" : "") + '>확인한 지 오래된 순</option></select>' +
     '</div>';
   }
   // 필터·정렬 적용 후 전체 본문(필터바+안내+리스트) 반환
@@ -7102,18 +7102,18 @@ window.hideCalibration = async function() {
     var pool = base.filter(function (m) { return _rateFilter === "all" || rateBand(m.phone) === _rateFilter; });
     var staleN = pool.filter(function (m) { return isStale(m.phone); }).length;
     if (_staleOnly) pool = pool.filter(function (m) { return isStale(m.phone); });
-    if (_sortMode === "h" || _sortMode === "r") {   // 11-05: 레퍼런스 노트 적중 · 해결된 코칭
-      var X = window.wcGrowthExtra, isH = _sortMode === "h", ready = !!(X && X.get("") !== null);
-      var xv = function (m) { var x = X.get(m.phone) || {}; if (!isH) return x.res || null; return (x.hit && x.hit.e != null && x.hit.r != null && x.span >= 56 * 864e5) ? x.hit.r - x.hit.e : null; };
+    if (XMODES[_sortMode]) {   // 11-05: 레퍼런스 노트 적중 · 센서리 정확도 · 역량 점수 · 해결된 코칭
+      var X = window.wcGrowthExtra, XM = XMODES[_sortMode], ready = !!(X && X.get("") !== null);
+      var xv = function (m) { var x = X.get(m.phone) || {}; if (XM.long && !(x.span >= 56 * 864e5)) return null; return XM.val(x); };
       var hx = filterBarHTML() + filterRow2HTML(base, staleN) +
-        '<div style="font-size:14px;font-weight:700;color:#4e5968;margin-bottom:5px;line-height:1.5;">' + (isH ? '<b style="color:#ff7900;">레퍼런스 노트 적중</b> 성장 폭이 큰 순으로 정렬했어요.' : '<b style="color:#ff7900;">해결된 코칭</b>이 많은 순으로 정렬했어요.') + '</div>' +
-        '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">' + (isH ? '가입 후 첫 4주와 최근 4주를 비교해요 · 기록이 8주 이상인 멤버만' : '코칭 코멘트에 \'해결됨\'을 표시한 건수예요') + '</div>';
+        '<div style="font-size:14px;font-weight:700;color:#4e5968;margin-bottom:5px;line-height:1.5;"><b style="color:#ff7900;">' + XM.t + '</b> ' + XM.tail + '</div>' +
+        '<div style="font-size:13px;color:#6b7684;margin-bottom:16px;line-height:1.6;">' + XM.sub + '</div>';
       if (!ready) return hx + '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">불러오는 중…</div>';
       var qx = pool.filter(function (m) { return xv(m) != null; }).sort(function (a, b) { return xv(b) - xv(a); });
-      if (!qx.length) hx += '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">' + (isH ? '비교할 기록이 쌓인 멤버가 아직 없어요.' : '아직 해결된 코칭이 없어요. 코멘트에서 \'해결됨\'을 누르면 여기 잡혀요.') + '</div>';
+      if (!qx.length) hx += '<div style="padding:26px 0;text-align:center;color:#8b95a1;font-size:13px;">' + XM.empty + '</div>';
       else { var rx = 0; hx += qx.map(function (m) { rx++; return memberCard(m, rx, false, true); }).join(""); }
       var left = pool.length - qx.length;
-      if (left > 0 && qx.length) hx += '<div style="margin-top:14px;font-size:12.5px;color:#8b95a1;">' + (isH ? '기록이 8주보다 짧거나 레퍼런스 노트 기록이 없는 멤버 ' : '해결된 코칭이 없는 멤버 ') + left + '명은 목록에서 빠졌어요.</div>';
+      if (left > 0 && qx.length) hx += '<div style="margin-top:14px;font-size:12.5px;color:#8b95a1;">' + XM.left + ' ' + left + '명은 목록에서 빠졌어요.</div>';
       return hx;
     }
     if (_sortMode === "c") {
@@ -7282,15 +7282,35 @@ window.hideCalibration = async function() {
     window.__wcNoteSum = null;
     window.wcNoteBulk().then(function (m) { window.__wcNoteSum = m || {}; paintChk(); }, function () { window.__wcNoteSum = {}; paintChk(); });
   }
-  /* 11-05: 레퍼런스 노트 적중 · 해결된 코칭 한 줄 (커핑 14 · wcGrowthExtra) — 나빠지면 회색 */
+  /* 11-05: 가입 첫 4주 → 최근 4주 한 줄 (커핑 14 · wcGrowthExtra) — 좋아지면 초록, 그대로·나빠지면 회색 */
+  var XLONG = '기록이 8주 이상인 멤버만';
+  var XMODES = {
+    h: { t: "레퍼런스 노트 적중", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "가입 후 첫 4주와 최근 4주를 비교해요 · " + XLONG, long: 1, empty: "비교할 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 레퍼런스 노트 기록이 없는 멤버",
+      val: function (x) { var k = x.hit; return (k && k.e != null && k.r != null) ? k.r - k.e : null; } },
+    s: { t: "센서리 정확도", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "가입 후 첫 4주와 최근 4주의 센서리 편차를 비교해요 · 편차가 줄어든 만큼 위로 · " + XLONG, long: 1, empty: "비교할 센서리 기록이 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 센서리 기록이 없는 멤버",
+      val: function (x) { var k = x.sens; return (k && k.e != null && k.r != null) ? k.e - k.r : null; } },
+    k: { t: "역량 점수", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "가입 후 첫 4주와 최근 4주의 교육 매니저 점수를 비교해요 · 가장 많이 오른 역량 기준 · " + XLONG, long: 1, empty: "비교할 역량 점수가 쌓인 멤버가 아직 없어요.", left: "기록이 8주보다 짧거나 두 구간 모두에 점수가 없는 멤버",
+      val: function (x) { return x.sc ? x.sc.imp : null; } },
+    r: { t: "해결된 코칭", tail: "이 많은 순으로 정렬했어요.", sub: "코칭 코멘트에 '해결됨'을 표시한 건수예요", long: 0, empty: "아직 해결된 코칭이 없어요. 코멘트에서 '해결됨'을 누르면 여기 잡혀요.", left: "해결된 코칭이 없는 멤버",
+      val: function (x) { return x.res || null; } }
+  };
+  function xr1(v) { return Math.round(v * 10) / 10; }
+  function xmd(t) { var d = new Date(t), W = ["일", "월", "화", "수", "목", "금", "토"]; return String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + W[d.getDay()] + ")"; }
   function exLineHTML(ph) {
     var X = window.wcGrowthExtra; if (!X) return "";
-    var x = X.get(ph); if (x === null) return '레퍼런스 노트 불러오는 중…';
-    var S = '<span class="sep">·</span>', h = x.hit || {};
-    var a = (h.e != null && h.r != null)
-      ? '레퍼런스 노트 ' + Math.round(h.e) + '% → <b class="' + (Math.round(h.r) > Math.round(h.e) ? "up" : "dn") + '">' + Math.round(h.r) + '%</b>'
-      : '레퍼런스 노트 <span class="m">비교할 기록 없음</span>';
-    return a + S + '해결된 코칭 ' + (x.res ? '<b>' + x.res + '건</b>' : '<span class="m">—</span>');
+    var x = X.get(ph); if (x === null) return '<span class="it">첫 4주 → 최근 4주 불러오는 중…</span>';
+    var S = '<span class="sep">·</span>', out = [], M = '<span class="m">—</span>';
+    var pair = function (k, f, lower, u) {
+      if (!k || k.e == null || k.r == null) return M;
+      var a = f(k.e), b = f(k.r), good = lower ? b < a : b > a;
+      return a + (u || "") + ' → <b class="' + (good ? "up" : "dn") + '">' + b + (u || "") + '</b>';
+    };
+    if (x.t0) out.push('<span class="it">' + xmd(x.t0) + ' → ' + xmd(x.t1) + '</span>');
+    out.push('<span class="it">레퍼런스 노트 ' + pair(x.hit, Math.round, false, "%") + '</span>');
+    out.push('<span class="it">센서리 편차 ' + pair(x.sens, xr1, true) + '</span>');
+    out.push('<span class="it">역량 점수' + (x.sc ? ' · ' + esc(x.sc.dom) + ' ' + pair(x.sc, xr1) : ' ' + M) + '</span>');
+    out.push('<span class="it">해결된 코칭 ' + (x.res ? '<b>' + x.res + '건</b>' : M) + '</span>');
+    return out.join(S);
   }
   function exRefresh() {
     var body = _$("wcGrowthBody"); if (!body) return;
@@ -7707,14 +7727,14 @@ window.hideCalibration = async function() {
       ".wcgr-act{font-size:12.5px;color:#8b95a1;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       ".wcgr-act b{font-weight:700;color:#4e5968;}.wcgr-act b.ok{color:#00b386;}.wcgr-act b.mid{color:#ea6f00;}.wcgr-act b.low{color:#e5484d;}" +
       ".wcgr-act .sep{color:#d1d6db;margin:0 7px;}.wcgr-act .m{color:#b0b8c1;font-weight:500;}" +
-      ".wcgr-ex{font-size:12.5px;color:#8b95a1;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wcgr-ex b{font-weight:700;color:#4e5968;}.wcgr-ex b.up{color:#00b386;font-weight:800;}.wcgr-ex b.dn{color:#8b95a1;}.wcgr-ex .sep{color:#d1d6db;margin:0 7px;}.wcgr-ex .m{color:#b0b8c1;font-weight:500;}" +
+      ".wcgr-ex{font-size:12.5px;color:#8b95a1;margin-top:4px;line-height:1.7;}.wcgr-ex .it{white-space:nowrap;}.wcgr-ex b{font-weight:700;color:#4e5968;}.wcgr-ex b.up{color:#00b386;font-weight:800;}.wcgr-ex b.dn{color:#8b95a1;}.wcgr-ex .sep{color:#d1d6db;margin:0 7px;}.wcgr-ex .m{color:#b0b8c1;font-weight:500;}" +
       ".wcgr-gc{height:32px;padding:0 12px;border:1px solid #ff7900;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;}" +   /* 11-05 */
       ".wcgr-chk{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 4px 4px 37px;}" +
       ".wcgr-chk .cbtn{height:34px;padding:0 14px;border:1px solid #ffd7b5;border-radius:9px;background:#fff;color:#ea6f00;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}" +
       ".wcgr-chk .cbtn:disabled{opacity:.5;cursor:default;}" +
       ".wcgr-chk .done{font-size:13px;font-weight:700;color:#00b386;}" +
       ".wcgr-chk .undo{border:none;background:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:#8b95a1;cursor:pointer;text-decoration:underline;}" +
-      "@media (max-width:720px){.wcgr-row2{gap:14px;}.wcgr-grp{flex-direction:column;align-items:flex-start;gap:6px;}.wcgr-chips{flex-wrap:wrap;}.wcgr-chip{padding:0 8px;}.wcgr-act{white-space:normal;}.wcgr-act .it{white-space:nowrap;}#wcGrowthSort{margin-left:0!important;}.wcgr-ex{white-space:normal;}.wcgr-gc{padding:0 9px;font-size:12px;}}";
+      "@media (max-width:720px){.wcgr-row2{gap:14px;}.wcgr-grp{flex-direction:column;align-items:flex-start;gap:6px;}.wcgr-chips{flex-wrap:wrap;}.wcgr-chip{padding:0 8px;}.wcgr-act{white-space:normal;}.wcgr-act .it{white-space:nowrap;}#wcGrowthSort{margin-left:0!important;}.wcgr-ex{overflow:hidden;word-break:keep-all;}.wcgr-ex .it{white-space:normal;}.wcgr-gc{height:28px;padding:0 8px;font-size:11.5px;}}";
     document.head.appendChild(st);
   }
   function ensureStyle() {
@@ -7808,7 +7828,7 @@ window.hideCalibration = async function() {
       if (_batchFilter !== "all" && _batchList.indexOf(_batchFilter) < 0) _batchFilter = "all";
       repaint();
       _act = null; loadAct().then(repaintKeep);   // 방문 기록은 뒤에서 받아 다시 그림
-      if (window.wcGrowthExtra) window.wcGrowthExtra.load().then(function () { if (_sortMode === "h" || _sortMode === "r") repaintKeep(); else exRefresh(); });   // 11-05
+      if (window.wcGrowthExtra) window.wcGrowthExtra.load().then(function () { if (XMODES[_sortMode]) repaintKeep(); else exRefresh(); });   // 11-05
     } catch (e) {
       console.error("[growth] 열기 실패", e);
       if (body) body.innerHTML = '<div style="padding:30px 0;text-align:center;color:#e5484d;font-size:13px;">불러오지 못했어요. 새로고침 후 다시 시도해 주세요.</div>';
@@ -9144,7 +9164,7 @@ window.hideCalibration = async function() {
   };
 
   /* ═══ 2. 멤버별 성장용 지표 (11-05: 하이라이트 탭 대신 멤버별 성장에 합침) ═══
-     window.wcGrowthExtra.get(phone) → { hit:{e,r}, span, res } · 불러오기 전엔 null */
+     window.wcGrowthExtra.get(phone) → { t0, t1, span, hit:{e,r}, sens:{e,r}, sc:{dom,e,r,imp}, res } · 불러오기 전엔 null */
   var GX = { map: null, at: 0, p: null };
   window.wcGrowthExtra = {
     get: function (ph) { return GX.map ? (GX.map[digits(ph)] || {}) : null; },
@@ -9157,20 +9177,24 @@ window.hideCalibration = async function() {
           var r = await Promise.all([
             window.wcNoteBulk ? window.wcNoteBulk().catch(function () { return {}; }) : {},
             sensAll(),
-            sb().from("coach_notes").select("member_phone,created_at,resolved_at").then(function (x) { return x; }, function () { return { data: [] }; })
+            sb().from("coach_notes").select("member_phone,eval_domain,score,created_at,resolved_at").then(function (x) { return x; }, function () { return { data: [] }; })
           ]);
           var notes = r[2] && !r[2].error ? (r[2].data || []) : [];
-          if (r[2] && r[2].error) { var r3 = await sb().from("coach_notes").select("member_phone,created_at"); notes = r3.data || []; }   // SQL 30 전
+          if (r[2] && r[2].error) { var r3 = await sb().from("coach_notes").select("member_phone,eval_domain,score,created_at"); notes = r3.data || []; }   // SQL 30 전
           var by = {}, now = Date.now();
-          function P(ph) { return by[ph] = by[ph] || { hit: [], at: [], res: 0 }; }
+          function P(ph) { return by[ph] = by[ph] || { hit: [], sens: [], score: {}, at: [], res: 0 }; }
           Object.keys(r[0] || {}).forEach(function (ph) { var o = P(ph); o.hit = (r[0][ph].pts || []).map(function (q) { return { at: q.at, v: q.rate }; }); o.hit.forEach(function (q) { o.at.push(q.at); }); });
-          Object.keys(r[1] || {}).forEach(function (ph) { var o = P(ph); r[1][ph].forEach(function (q) { o.at.push(q.at); }); });
-          notes.forEach(function (n) { var ph = digits(n.member_phone); if (!ph) return; var o = P(ph); o.at.push(ts(n.created_at)); if (n.resolved_at) o.res++; });
+          Object.keys(r[1] || {}).forEach(function (ph) { var o = P(ph); o.sens = r[1][ph]; o.sens.forEach(function (q) { o.at.push(q.at); }); });
+          notes.forEach(function (n) {
+            var ph = digits(n.member_phone); if (!ph) return; var o = P(ph), t = ts(n.created_at); o.at.push(t);
+            if (n.score != null && n.eval_domain) (o.score[n.eval_domain] = o.score[n.eval_domain] || []).push({ at: t, v: Number(n.score) });
+            if (n.resolved_at) o.res++;
+          });
           var map = {};
           Object.keys(by).forEach(function (ph) {
             var o = by[ph], all = o.at.filter(Boolean); if (!all.length) { map[ph] = { res: o.res }; return; }
-            var t0 = Math.min.apply(null, all), t1 = Math.max.apply(null, all);
-            map[ph] = { hit: cmp(o.hit, windows("j", t0, now)), span: t1 - t0, res: o.res };
+            var t0 = Math.min.apply(null, all), t1 = Math.max.apply(null, all), w = windows("j", t0, now);
+            map[ph] = { t0: t0, t1: t1, span: t1 - t0, hit: cmp(o.hit, w), sens: cmp(o.sens, w), sc: bestScore(o.score, w), res: o.res };
           });
           GX.map = map;
         } catch (e) { console.warn("[멤버별 성장] 레퍼런스 노트·해결된 코칭 불러오기 실패", e); GX.map = GX.map || {}; }
