@@ -565,7 +565,7 @@ window.renderTimeline=function(){
                 </button>
             </div>
         </div>`;
-    function generateBar(timeRange,label,typeClass,tooltip){
+    function generateBar(timeRange,label,typeClass,tooltip,top,rid){
         if(!timeRange||!timeRange.includes('~'))return '';
         const[startStr,endStr]=timeRange.split('~');
         const[sh,sm]=startStr.trim().split(':').map(Number);
@@ -577,7 +577,10 @@ window.renderTimeline=function(){
         if(duration<=0)return '';
         const left=(startMins/TOTAL_MINUTES)*100;
         const width=(duration/TOTAL_MINUTES)*100;
-        return `<div class="timeline-bar ${typeClass}" style="left:${left}%;width:${width}%;" data-tippy="${window.escapeHtml(tooltip)}" onmouseenter="window.showGlobalTooltip(event,this)" onmouseleave="window.hideGlobalTooltip()">${window.escapeHtml(label)}</div>`;
+        const topCss=(top!=null)?`top:${top}px;`:'';
+        // 11-05: 예약 막대는 누르면 약식 카드(window.wcResCard) · 운영팀 일정은 기존 말풍선 유지
+        if(rid!=null)return `<div class="timeline-bar ${typeClass}" style="left:${left}%;width:${width}%;${topCss}cursor:pointer;" data-rid="${window.escapeHtml(String(rid))}" onclick="window.wcResCard&&window.wcResCard(event,this)">${window.escapeHtml(label)}</div>`;
+        return `<div class="timeline-bar ${typeClass}" style="left:${left}%;width:${width}%;${topCss}" data-tippy="${window.escapeHtml(tooltip)}" onmouseenter="window.showGlobalTooltip(event,this)" onmouseleave="window.hideGlobalTooltip()">${window.escapeHtml(label)}</div>`;
     }
     function isMatch(dbSpace,uiEquip,zoneName){
         let dbStr=String(dbSpace||'').trim();
@@ -589,18 +592,27 @@ window.renderTimeline=function(){
         if(uiClean.split(' ').every(word=>safeDb.includes(word)))return true;
         return false;
     }
-    function renderBarsFor(equipName,zoneName,centerName){
-        let barsHtml='';
+    // 11-05: 같은 줄에서 시간이 겹치는 막대는 줄을 나눠 위아래로 쌓음 (겹칠 때만 그 줄 높이가 늘어남)
+    function tlMin(t){const m=String(t||'').trim().match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;}
+    function gridFor(equipName,zoneName,centerName){
+        const items=[];
         gRes.forEach(r=>{
             if(r.res_date===displayDate&&r.center===centerName&&!String(r.status).includes('취소')&&isMatch(r.space_equip,equipName,zoneName))
-                barsHtml+=generateBar(r.res_time,`${r.batch||'-'} ${r.name}`,'bar-res',`${r.res_time} | ${r.batch||'-'} ${r.name} | ${r.space_equip}`);
+                items.push({t:r.res_time,label:`${r.batch||'-'} ${r.name}`,cls:'bar-res',tip:`${r.res_time} | ${r.batch||'-'} ${r.name} | ${r.space_equip}`,rid:r.id});
         });
         function matchSpace(spaceStr,eqName,znName){if(!spaceStr)return(eqName==='merged'||eqName==='공간 전체');return String(spaceStr).split(',').map(s=>s.trim()).some(sp=>isMatch(sp,eqName,znName));}
         gBlk.forEach(b=>{
             if(b.block_date===displayDate&&b.center===centerName&&matchSpace(b.space_equip,equipName,zoneName))
-                barsHtml+=generateBar(`${b.start_time}~${b.end_time}`,`[${b.category}] ${b.reason}`,'bar-blk',`${b.start_time}~${b.end_time} | ${b.reason}`);
+                items.push({t:`${b.start_time}~${b.end_time}`,label:`[${b.category}] ${b.reason}`,cls:'bar-blk',tip:`${b.start_time}~${b.end_time} | ${b.reason}`,rid:null});
         });
-        return barsHtml;
+        items.forEach(it=>{const p=String(it.t||'').split('~');it.s=tlMin(p[0]);it.e=tlMin(p[1]);});
+        const ok=items.filter(it=>it.s!=null&&it.e!=null&&it.e>it.s).sort((a,b)=>a.s-b.s||a.e-b.e);
+        const ends=[];
+        ok.forEach(it=>{let k=ends.findIndex(e=>e<=it.s);if(k<0){k=ends.length;ends.push(it.e);}else ends[k]=it.e;it.lane=k;});
+        const n=Math.max(1,ends.length);
+        let barsHtml='';
+        ok.forEach(it=>{barsHtml+=generateBar(it.t,it.label,it.cls,it.tip,n>1?9+it.lane*42:null,it.rid);});
+        return `<div class="time-grid-bg"${n>1?` style="min-height:${12+n*42}px;"`:''}>${barsHtml}</div>`;
     }
     let mapoSpaces=[
         {zone:'에스프레소존',equips:['공간 전체','아스토리아 스톰 1번 그룹 (좌)','아스토리아 스톰 2번 그룹 (우)']},
@@ -621,11 +633,11 @@ window.renderTimeline=function(){
         finalHtml+=`<div style="${idx>0?'margin-top:32px;':''}"><div style="font-size:15px;font-weight:800;color:var(--text-display);margin-bottom:12px;text-align:left;">${centerName}</div><div class="timeline-container"><div class="timeline-grid"><div class="timeline-header"><div class="resource-label-header">공간 / 장비</div><div class="time-slots-header">${Array.from({length:24},(_,i)=>`<div class="time-slot-num">${String(i).padStart(2,'0')}:00</div>`).join('')}</div></div>`;
         spaceGroups.forEach(group=>{
             if(group.equips.length===1&&group.equips[0]==='merged'){
-                finalHtml+=`<div class="timeline-row"><div class="merged-col">${group.zone}</div><div class="time-grid-bg">${renderBarsFor('merged',group.zone,centerName)}</div></div>`;
+                finalHtml+=`<div class="timeline-row"><div class="merged-col">${group.zone}</div>${gridFor('merged',group.zone,centerName)}</div>`;
             }else{
                 finalHtml+=`<div class="zone-group-row"><div class="zone-col">${group.zone}</div><div class="equip-col-wrapper">`;
                 group.equips.forEach(eq=>{
-                    finalHtml+=`<div class="timeline-row"><div class="equip-name">${eq}</div><div class="time-grid-bg">${renderBarsFor(eq,group.zone,centerName)}</div></div>`;
+                    finalHtml+=`<div class="timeline-row"><div class="equip-name">${eq}</div>${gridFor(eq,group.zone,centerName)}</div>`;
                 });
                 finalHtml+=`</div></div>`;
             }
@@ -5940,9 +5952,11 @@ window.hideCalibration = async function() {
       });
       if (Z["로스팅존"].n) parts.push("로스팅존 " + Z["로스팅존"].n + "회" + (Z["로스팅존"].nb ? " (생두 " + Z["로스팅존"].nb + "종)" : ""));
       if (!parts.length) return "";
+      if (cnPracticeLine.__raw) return parts.join(" · ");
       return '<p style="font-size:12.5px;color:#4e5968;line-height:1.6;margin:0 0 10px;word-break:keep-all;"><b style="color:#191f28;">최근 4주 연습</b> · ' + parts.join(" · ") + '</p>';
     } catch (e) { return ""; }
   }
+  window.wcPracticeParts = function (ress) { cnPracticeLine.__raw = 1; try { return cnPracticeLine(ress); } finally { cnPracticeLine.__raw = 0; } };
   // ctx = {sessionId, beanId, refId} · opts = {ph, mb, label, pre}
   function coachBlockHTML(scope, phone, name, ctx, title, sub, opts){
     ctx = ctx || {}; opts = opts || {};
@@ -9690,3 +9704,99 @@ window.hideCalibration = async function() {
   };
 })();
 /* ═══ 커핑 14 끝 ═══ */
+
+/* ═══ 예약 현황 약식 카드 (11-05) ═══
+   · 센터 관리 > 예약 현황 타임라인에서 멤버 예약 막대를 누르면 막대 아래에 작은 카드
+   · 이 예약(트레이닝 종류 / 로스팅한 생두) · 최근 4주 연습 · 마지막 코칭 코멘트 날짜(14일 이상·없음은 주황)
+   · '멤버 상세 열기' = 기존 멤버 상세(openHistoryModal) · 바깥 누르기 / Esc / 스크롤 시 닫힘 */
+(function () {
+  "use strict";
+  var DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function digits(p) { return String(p == null ? "" : p).replace(/\D/g, ""); }
+  function ymd(s) { var m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function md(d) { return String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0") + " (" + DOW[d.getDay()] + ")"; }
+  function zoneOf(sp) { sp = String(sp || ""); return sp.indexOf("로스팅") >= 0 ? "로스팅존" : sp.indexOf("에스프레소") >= 0 ? "에스프레소존" : sp.indexOf("브루잉") >= 0 ? "브루잉존" : ""; }
+  function style() {
+    if (document.getElementById("wcResCardCss")) return;
+    var st = document.createElement("style"); st.id = "wcResCardCss";
+    st.textContent = [
+      "#wcResCard{position:fixed;z-index:2147483000;width:320px;max-width:calc(100vw - 16px);background:#fff;border:1px solid #e5e8eb;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.12);padding:16px 16px 14px;text-align:left;font-family:inherit;color:#191f28;letter-spacing:-.2px;}",
+      "#wcResCard .nm{font-size:16px;font-weight:800;padding-right:40px;}#wcResCard .nm span{font-size:12.5px;font-weight:600;color:#8b95a1;margin-left:6px;}",
+      "#wcResCard .x{position:absolute;right:10px;top:10px;border:0;background:none;color:#8b95a1;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;padding:4px;}",
+      "#wcResCard .when{font-size:12.5px;color:#6b7684;margin-top:4px;word-break:keep-all;}",
+      "#wcResCard .sec{margin-top:12px;padding-top:12px;border-top:1px solid #f2f4f6;}",
+      "#wcResCard .k{font-size:11.5px;font-weight:700;color:#8b95a1;margin-bottom:4px;}",
+      "#wcResCard .v{font-size:13px;color:#4e5968;line-height:1.55;word-break:keep-all;}#wcResCard .v b{color:#191f28;}#wcResCard .v em{font-style:normal;color:#b0b8c1;}",
+      "#wcResCard .warn{color:#ea6f00;font-weight:700;}",
+      "#wcResCard .go{display:block;width:100%;margin-top:14px;height:38px;border:1px solid #e5e8eb;border-radius:10px;background:#fff;color:#191f28;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}",
+      ".timeline-bar.wc-on{filter:brightness(.92);}"
+    ].join("");
+    document.head.appendChild(st);
+  }
+  var cur = null, seq = 0;
+  function close() { var c = document.getElementById("wcResCard"); if (c) c.remove(); if (cur) cur.classList.remove("wc-on"); cur = null; }
+  function place(card, bar) {
+    var br = bar.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    var w = card.offsetWidth, h = card.offsetHeight;
+    var x = Math.min(Math.max(8, br.left), vw - w - 8);
+    var y = br.bottom + 8; if (y + h > vh - 8 && br.top - h - 8 > 8) y = br.top - h - 8;
+    card.style.left = x + "px"; card.style.top = Math.max(8, y) + "px";
+  }
+  window.wcResCard = async function (ev, bar) {
+    try { ev && ev.stopPropagation(); } catch (e) {}
+    if (cur === bar) { close(); return; }
+    close(); style();
+    var list = (typeof gRes !== "undefined" && Array.isArray(gRes)) ? gRes : [];
+    var rid = bar.getAttribute("data-rid"), r = null;
+    for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(rid)) { r = list[i]; break; }
+    if (!r) return;
+    cur = bar; bar.classList.add("wc-on");
+    var my = ++seq;
+    var sp = String(r.space_equip || "").replace(/로스팅룸/g, "로스팅존"), mm = sp.match(/^(.*?)\s*\((.*)\)\s*$/);
+    var where = mm ? mm[1] + " · " + mm[2] : sp;
+    var card = document.createElement("div"); card.id = "wcResCard";
+    card.innerHTML = '<button type="button" class="x">닫기</button><div class="nm">' + esc(r.name) + '<span>' + esc(r.batch || "") + '</span></div>' +
+      '<div class="when">' + esc(where) + ' · ' + esc(String(r.res_time || "").replace(/\s*~\s*/, " ~ ")) + '</div>' +
+      '<div class="sec"><div class="v"><em>불러오는 중…</em></div></div>';
+    document.body.appendChild(card); place(card, bar);
+    card.addEventListener("click", function (e) { e.stopPropagation(); if (e.target.closest(".x")) close(); });
+    var ph = digits(r.phone), last4 = ph.slice(-4), ress = [], note = null;
+    try {
+      var q = await supabaseClient.from("reservations").select("id,phone,status,res_date,space_equip,purpose,plan_beans").ilike("phone", "%" + last4);
+      ress = ((q && q.data) || []).filter(function (x) { return digits(x.phone) === ph && String(x.status || "").indexOf("취소") < 0; });
+    } catch (e) { console.warn("[예약 카드] 예약 기록 조회 실패", e); }
+    try {
+      var n = await supabaseClient.from("coach_notes").select("created_at").eq("member_phone", ph).order("created_at", { ascending: false }).limit(1);
+      note = n && n.data && n.data[0] ? n.data[0] : null;
+    } catch (e) { console.warn("[예약 카드] 코칭 코멘트 조회 실패", e); }
+    if (my !== seq || !document.body.contains(card)) return;
+    var me = null; for (var j = 0; j < ress.length; j++) if (String(ress[j].id) === String(r.id)) { me = ress[j]; break; }
+    var z = zoneOf(r.space_equip), h = "";
+    if (z === "로스팅존") {
+      var bs = (me && Array.isArray(me.plan_beans) ? me.plan_beans : []).map(function (b) { return String(b && b.name || "").trim(); }).filter(Boolean);
+      h += '<div class="sec"><div class="k">이 예약</div><div class="v">' + (bs.length ? '<b>로스팅한 생두</b> · ' + esc(bs.join(", ")) : '<em>로스팅한 생두를 적지 않았어요</em>') + '</div></div>';
+    } else if (z) {
+      var pp = me && String(me.purpose || "").trim();
+      h += '<div class="sec"><div class="k">이 예약</div><div class="v">' + (pp ? '<b>트레이닝</b> · ' + esc(pp) : '<em>트레이닝 종류를 고르지 않았어요</em>') + '</div></div>';
+    }
+    var wk = typeof window.wcPracticeParts === "function" ? window.wcPracticeParts(ress) : "";
+    h += '<div class="sec"><div class="k">최근 4주 연습</div><div class="v">' + (wk || '<em>최근 4주 동안 에스프레소존·브루잉존·로스팅존 예약이 없어요</em>') + '</div></div>';
+    var c;
+    if (note) {
+      var d = new Date(note.created_at), t = new Date(), d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()), t0 = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+      var days = Math.round((t0 - d0) / 864e5), ago = days <= 0 ? "오늘" : days + "일 전";
+      c = '마지막 코칭 코멘트 ' + md(d) + ' · ' + (days >= 14 ? '<span class="warn">' + ago + '</span>' : ago);
+    } else c = '<span class="warn">아직 코칭 코멘트가 없어요</span>';
+    h += '<div class="sec"><div class="k">코칭</div><div class="v">' + c + '</div></div>';
+    h += '<button type="button" class="go">멤버 상세 열기</button>';
+    var secs = card.querySelectorAll(".sec"); if (secs.length) secs[0].remove();
+    card.insertAdjacentHTML("beforeend", h); place(card, bar);
+    card.querySelector(".go").onclick = function () { var p = r.phone, nm = r.name; close(); if (typeof window.openHistoryModal === "function") window.openHistoryModal(p, nm); };
+  };
+  document.addEventListener("click", function (e) { if (cur && !e.target.closest("#wcResCard") && !e.target.closest(".timeline-bar[data-rid]")) close(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && cur) close(); });
+  window.addEventListener("scroll", function () { if (cur) close(); }, true);
+  window.addEventListener("resize", function () { if (cur) close(); });
+})();
+/* ═══ 예약 현황 약식 카드 끝 ═══ */
