@@ -7291,7 +7291,7 @@ window.hideCalibration = async function() {
     out.push('<span class="it">레퍼런스 컵노트 ' + pair(x.hit, Math.round, false, "%") + '</span>');
     out.push('<span class="it">센서리 편차 ' + pair(x.sens, xr1, true) + '</span>');
     out.push('<span class="it">역량 점수' + (x.sc ? ' · ' + esc(x.sc.dom) + ' ' + pair(x.sc, xr1) : ' ' + M) + '</span>');
-    out.push('<span class="it">코칭 뒤 오른 점수 ' + (x.res ? '<b>' + x.res + '건</b>' : M) + '</span>');
+    out.push('<span class="it">코칭 뒤 나아진 점 ' + (x.res ? '<b>' + x.res + '건</b>' : M) + '</span>');
     return out.join(S);
   }
   function exRefresh() {
@@ -8889,8 +8889,8 @@ window.hideCalibration = async function() {
    WeCoffee Admin · 커핑 14 — 성장 리포트 · 멤버별 성장 지표 · 성장 카드 (11-05)
    · 멤버 상세 맨 위 #wcMemReport : 비교(첫 4주 → 마지막 4주 · 마지막 기록 기준 / 지난달 → 이번 달) · 성장 현황 펼침에도 같은 블록
        레퍼런스 컵노트 중 짚은 비율 · 센서리 정확도 편차 · 한 컵에 적은 노트 수 · 역량 점수
-       레퍼런스 컵노트 적중 추이 · 코칭 뒤 오른 점수(같은 역량 점수 코멘트가 앞보다 오른 묶음 · 자동) · 해당 멤버의 성장 과정 카드로 보기
-   · 성장 현황 › 멤버별 성장 : window.wcGrowthExtra (레퍼런스 컵노트 적중 · 센서리 · 역량 점수 · 오른 점수) — 정렬·한 줄·성장 카드 버튼
+       레퍼런스 컵노트 적중 추이 · 코칭 뒤 나아진 점(같은 역량 점수 코멘트가 앞보다 오른 묶음 · 자동) · 해당 멤버의 성장 과정 카드로 보기
+   · 성장 현황 › 멤버별 성장 : window.wcGrowthExtra (레퍼런스 컵노트 적중 · 센서리 · 역량 점수 · 나아진 점) — 정렬·한 줄·성장 카드 버튼
    · 성장 카드 창 #wcGcOly : 한 장(센서리·로스팅 코칭·함께 커핑) / 넘겨 보기 5장 · 이름 가리기 · 이미지 저장(4:5 · 1080×1350)
    의존: supabaseClient · 커핑 13(wcNoteData·wcNoteGrowthCompute·wcNoteBulk) · 커핑 8(openHistoryModal)
    서버: coach_notes · member_sensory_series RPC · cupping_* · reservations  (11-05: 해결됨 표시는 뺐음 · SQL 30 칸은 안 씀)
@@ -8991,7 +8991,7 @@ window.hideCalibration = async function() {
     Object.keys(score).forEach(function (dom) { var k = cmp(score[dom], w); if (k.e == null || k.r == null) return; var imp = k.r - k.e; if (!best || imp > best.imp) best = { dom: dom, e: k.e, r: k.r, imp: imp, ne: k.ne, nr: k.nr, n: k.n, k: k.k, ea: k.ea, eb: k.eb, ra: k.ra, rb: k.rb }; });
     return best;
   }
-  /* 11-05: 코칭 뒤 오른 점수 — 같은 역량에 남긴 점수 코멘트가 앞보다 오르면 앞·뒤 코멘트를 한 묶음으로 (근무자가 따로 누를 것 없음) */
+  /* 11-05: 코칭 뒤 나아진 점 — 같은 역량에 남긴 점수 코멘트가 앞보다 오르면 앞·뒤 코멘트를 한 묶음으로 (근무자가 따로 누를 것 없음) */
   function scorePairs(notes) {
     var by = {};
     (notes || []).forEach(function (n) { if (n.score == null || n.score === "" || !n.eval_domain) return; (by[n.eval_domain] = by[n.eval_domain] || []).push(n); });
@@ -9161,6 +9161,8 @@ window.hideCalibration = async function() {
     });
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;">' + h + '</svg>';
   }
+  function josaIGa(w) { var c = String(w || "").charCodeAt(String(w || "").length - 1); return (c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28) ? "이" : "가"; }
+  function riseTxt(it) { return it.days + "일 사이 " + esc(it.dom) + josaIGa(it.dom) + " 한 걸음 나아졌어요"; }   // 점수 숫자는 문장에 넣지 않음
   function riseHTML(items) {
     if (!items) return '<div class="wrp-em">불러오는 중…</div>';
     if (!items.length) return '<div class="wrp-em">아직 없어요. 같은 역량에 점수를 남긴 코멘트가 앞보다 오르면 여기 모여요.</div>';
@@ -9170,7 +9172,7 @@ window.hideCalibration = async function() {
       var mid = it.roasts ? '<div class="wrp-ti"><div class="t">' + mdw(ts(it.resList[0].res_date)) + ' → ' + mdw(ts(it.resList[it.resList.length - 1].res_date)) + '</div><div class="x">같은 생두로 로스팅 ' + it.roasts + '회' + (it.cups ? ' · 커핑 ' + it.cups + '회' : '') + '</div></div>' : '';
       return (i ? '<div class="wrp-sep"></div>' : '') + '<div class="wrp-tl">' +
         '<div class="wrp-ti c"><div class="t">' + mdw(ts(A.created_at)) + ' · ' + esc(A.author_name || "교육 매니저") + ' · ' + esc(it.dom) + ' ' + esc(A.score) + '/10</div><div class="x">' + esc(A.note) + '</div></div>' + mid +
-        '<div class="wrp-ti ok"><div class="t">' + mdw(ts(B.created_at)) + ' · ' + esc(B.author_name || "교육 매니저") + '</div><div class="wrp-ok"><b>' + esc(it.dom) + ' ' + esc(A.score) + ' → ' + esc(B.score) + ' · ' + it.days + '일</b>' + esc(B.note || "") + '</div></div></div>';
+        '<div class="wrp-ti ok"><div class="t">' + mdw(ts(B.created_at)) + ' · ' + esc(B.author_name || "교육 매니저") + ' · ' + esc(it.dom) + ' ' + esc(B.score) + '/10</div><div class="wrp-ok"><b>' + riseTxt(it) + '</b>' + esc(B.note || "") + '</div></div></div>';
     }).join("") + more;
   }
   function paintReport(el, g, name) {
@@ -9193,11 +9195,11 @@ window.hideCalibration = async function() {
       metricCard("한 컵에 적은 노트 수", cmp(g.cnt, w), { w: w, fmt: function (v) { return r1(v) + "개"; }, dfmt: function (d) { return r1(d) + "개"; }, sub: "평균" }) +
       (vb.total ? metricCard("표현 범위", { e: vb.before, r: vb.total, n: 2 }, { w: w, noCnt: 1, fmt: function (v) { return v + "가지"; }, dfmt: function (d) { return String(d); }, sub: "지금까지 쓴 노트 표현 · " + vb.lbl + "에 새로 쓴 것" })
           : '<div class="wrp-c"><div class="l">표현 범위</div><div class="em">아직 기록이 없어요</div></div>') +
-      '<div class="wrp-c"><div class="l">코칭 뒤 오른 점수</div><div class="v"><span class="b">' + resN.length + '건</span></div><div class="s">' + (resN.length ? esc(Object.keys(resDom).map(function (k) { return k + " " + resDom[k] + "건"; }).join(" · ")) : (mode === "m" ? "이번 달에 오른 점수가 없어요" : "같은 역량 점수가 앞 코멘트보다 오른 횟수")) + '</div></div>' +
+      '<div class="wrp-c"><div class="l">코칭 뒤 나아진 점</div><div class="v"><span class="b">' + resN.length + '건</span></div><div class="s">' + (resN.length ? esc(Object.keys(resDom).map(function (k) { return k + " " + resDom[k] + "건"; }).join(" · ")) : (mode === "m" ? "이번 달에 나아진 점이 없어요" : "같은 역량 점수가 앞 코멘트보다 오른 횟수")) + '</div></div>' +
       '</div>';
     if (g.hit.length >= 2) h += '<div class="wrp-t"><b>레퍼런스 컵노트 적중 추이</b><span>커핑 회차별</span></div><div class="wrp-box">' + trendSVG(g.hit) + '</div>';
     h += noteGroupsHTML(g, w);
-    h += '<div class="wrp-t"><b>코칭 뒤 오른 점수</b><span>같은 역량에 남긴 점수가 앞 코멘트보다 오른 경우</span></div><div class="wrp-box" data-wrp-res>' + riseHTML(g.rises) + '</div>';
+    h += '<div class="wrp-t"><b>코칭 뒤 나아진 점</b><span>같은 역량에 남긴 점수가 앞 코멘트보다 오른 경우</span></div><div class="wrp-box" data-wrp-res>' + riseHTML(g.rises) + '</div>';
     h += '<div class="wrp-foot"><button type="button" class="wrp-btn" data-wrp-card>해당 멤버의 성장 과정 카드로 보기</button></div>';
     el.innerHTML = h;
   }
@@ -9230,7 +9232,7 @@ window.hideCalibration = async function() {
       ["역량 점수", "교육 매니저가 코멘트에 남긴 10점 만점 점수예요. 여러 역량 중 가장 많이 오른 역량을 보여 줘요."],
       ["한 컵에 적은 노트 수", "커핑 1회에서 원두 한 컵마다 적은 노트 수의 평균이에요."],
       ["표현 범위", "지금까지 쓴 노트 표현의 가짓수예요. 옆 숫자는 최근 구간에 처음 쓴 표현 수예요."],
-      ["코칭 뒤 오른 점수", "같은 역량(센서리 · 로스팅 · 추출)에 점수를 남긴 코멘트가 바로 앞 코멘트보다 오른 횟수예요. 앞·뒤 코멘트를 한 묶음으로 보여 줘요. 따로 표시할 건 없어요."],
+      ["코칭 뒤 나아진 점", "같은 역량(센서리 · 로스팅 · 추출)에 점수를 남긴 코멘트가 바로 앞 코멘트보다 오른 횟수예요. 앞·뒤 코멘트를 한 묶음으로 보여 줘요. 따로 표시할 건 없어요."],
       ["성장순", "센서리 · 로스팅 · 추출 역량별 개선폭(최근 − 처음)의 평균이에요. 역량별로 3회 이상 기록이 있어야 순위에 들어가요. 센서리는 커핑 편차, 로스팅·추출은 교육 매니저 점수예요."],
       ["색", "<b style=\"color:#00b386\">초록</b>은 좋아진 쪽이에요. 성장 리포트와 멤버 줄 아래 한 줄에서는 그대로이거나 나빠지면 회색, 역량 추이와 종합 성장에서는 나빠지면 <b style=\"color:#e5484d\">빨강</b>이에요. 센서리 편차는 줄어야 좋아진 거예요."]
     ];
@@ -9275,7 +9277,7 @@ window.hideCalibration = async function() {
             map[ph] = { t0: t0, t1: t1, span: t1 - t0, hit: cmp(o.hit, w), sens: cmp(o.sens, w), sc: bestScore(o.score, w), res: o.res };
           });
           GX.map = map;
-        } catch (e) { console.warn("[멤버별 성장] 레퍼런스 컵노트·오른 점수 불러오기 실패", e); GX.map = GX.map || {}; }
+        } catch (e) { console.warn("[멤버별 성장] 레퍼런스 컵노트·나아진 점 불러오기 실패", e); GX.map = GX.map || {}; }
         return GX.map;
       })();
       return GX.p;
@@ -9422,7 +9424,7 @@ window.hideCalibration = async function() {
     var A = it.a, B = it.b, N = it.roasts || 0, dots = "";
     for (var i = 0; i < Math.max(2, N); i++) dots += (i ? "<b></b>" : "") + '<i class="' + (i === 0 ? "x" : (i === Math.max(2, N) - 1 ? "o" : "")) + '"></i>';
     return '<div class="pc dk" data-name="로스팅코칭">' +
-      '<div class="lg">' + logoImg(true) + '</div><div class="k">로스팅 코칭</div>' + ed("hd", (N ? "같은 생두 " + N + "번 로스팅,<br>" : "") + it.days + "일 만에 " + esc(A.score) + "점에서 " + esc(B.score) + "점으로") +
+      '<div class="lg">' + logoImg(true) + '</div><div class="k">로스팅 코칭</div>' + ed("hd", (N ? "같은 생두 " + N + "번 로스팅,<br>" : "") + it.days + "일 만에 찾은 답") +
       (N ? '<div class="pr"><div class="at">' + dots + '</div><div class="spl"><span>1차 · ' + mdw(ts(it.resList[0].res_date)) + '</span><span>' + N + '차 · ' + mdw(ts(it.resList[N - 1].res_date)) + '</span></div></div>' : '') +
       '<div class="cap" style="margin-top:auto">' + esc(it.bean ? trimQ(it.bean, 30) : "교육 매니저 코칭") + (it.cups ? ' · 커핑 ' + it.cups + '번' : '') + '</div>' +
       '<div class="q">' + ((A.visible && B.visible) ? ed("qq", '"' + esc(trimQ(A.note, 40)) + '" → "' + esc(trimQ(B.note, 40)) + '"') : ed("qq", "", "코멘트를 적어 주세요 (비공개 코멘트는 카드에 넣지 않아요)")) + '<small>교육 매니저 코멘트 · ' + esc(who()) + ' 님</small></div>' + foot() + '</div>';   /* 11-05: 멤버에게 공개한 코멘트만 카드에 */
