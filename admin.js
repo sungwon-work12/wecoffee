@@ -579,7 +579,7 @@ window.renderTimeline=function(){
         const width=(duration/TOTAL_MINUTES)*100;
         const topCss=(top!=null)?`top:${top}px;`:'';
         // 11-05: 예약 막대는 누르면 약식 카드(window.wcResCard) · 운영팀 일정은 기존 말풍선 유지
-        if(rid!=null)return `<div class="timeline-bar ${typeClass}" style="left:${left}%;width:${width}%;${topCss}cursor:pointer;" data-rid="${window.escapeHtml(String(rid))}" onclick="window.wcResCard&&window.wcResCard(event,this)">${window.escapeHtml(label)}</div>`;
+        if(rid!=null)return `<div class="timeline-bar ${typeClass}" style="left:${left}%;width:${width}%;${topCss}cursor:pointer;" data-rid="${window.escapeHtml(String(rid))}" onmouseenter="window.wcResCardHover&&window.wcResCardHover(event,this)" onmouseleave="window.wcResCardLeave&&window.wcResCardLeave()" onclick="window.wcResCard&&window.wcResCard(event,this)">${window.escapeHtml(label)}</div>`;
         return `<div class="timeline-bar ${typeClass}" style="left:${left}%;width:${width}%;${topCss}" data-tippy="${window.escapeHtml(tooltip)}" onmouseenter="window.showGlobalTooltip(event,this)" onmouseleave="window.hideGlobalTooltip()">${window.escapeHtml(label)}</div>`;
     }
     function isMatch(dbSpace,uiEquip,zoneName){
@@ -9734,7 +9734,7 @@ window.hideCalibration = async function() {
     ].join("");
     document.head.appendChild(st);
   }
-  var cur = null, seq = 0;
+  var cur = null, seq = 0, viaHover = false, hT = null, lT = null, CACHE = {};
   function close() { var c = document.getElementById("wcResCard"); if (c) c.remove(); if (cur) cur.classList.remove("wc-on"); cur = null; }
   function place(card, bar) {
     var br = bar.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = window.innerHeight;
@@ -9745,7 +9745,7 @@ window.hideCalibration = async function() {
   }
   window.wcResCard = async function (ev, bar) {
     try { ev && ev.stopPropagation(); } catch (e) {}
-    if (cur === bar) { close(); return; }
+    if (cur === bar) { if (viaHover && ev && ev.type === "click") { viaHover = false; return; } close(); return; }   // 호버로 열린 카드는 눌러도 닫지 않고 고정
     close(); style();
     var list = (typeof gRes !== "undefined" && Array.isArray(gRes)) ? gRes : [];
     var rid = bar.getAttribute("data-rid"), r = null;
@@ -9760,8 +9760,11 @@ window.hideCalibration = async function() {
       '<div class="when">' + esc(where) + ' · ' + esc(String(r.res_time || "").replace(/\s*~\s*/, " ~ ")) + '</div>' +
       '<div class="sec"><div class="v"><em>불러오는 중…</em></div></div>';
     document.body.appendChild(card); place(card, bar);
-    card.addEventListener("click", function (e) { e.stopPropagation(); if (e.target.closest(".x")) close(); });
-    var ph = digits(r.phone), last4 = ph.slice(-4), ress = [], note = null;
+    card.addEventListener("click", function (e) { e.stopPropagation(); viaHover = false; if (e.target.closest(".x")) close(); });
+    card.addEventListener("mouseenter", function () { clearTimeout(lT); });
+    card.addEventListener("mouseleave", function () { if (viaHover) window.wcResCardLeave(); });
+    var ph = digits(r.phone), last4 = ph.slice(-4), ress = [], note = null, hit = CACHE[ph];
+    if (hit && Date.now() - hit.at < 60000) { ress = hit.ress; note = hit.note; } else {
     try {
       var q = await supabaseClient.from("reservations").select("id,phone,status,res_date,space_equip,purpose,plan_beans").ilike("phone", "%" + last4);
       ress = ((q && q.data) || []).filter(function (x) { return digits(x.phone) === ph && String(x.status || "").indexOf("취소") < 0; });
@@ -9770,6 +9773,8 @@ window.hideCalibration = async function() {
       var n = await supabaseClient.from("coach_notes").select("created_at").eq("member_phone", ph).order("created_at", { ascending: false }).limit(1);
       note = n && n.data && n.data[0] ? n.data[0] : null;
     } catch (e) { console.warn("[예약 카드] 코칭 코멘트 조회 실패", e); }
+    CACHE[ph] = { at: Date.now(), ress: ress, note: note };
+    }
     if (my !== seq || !document.body.contains(card)) return;
     var me = null; for (var j = 0; j < ress.length; j++) if (String(ress[j].id) === String(r.id)) { me = ress[j]; break; }
     var z = zoneOf(r.space_equip), h = "";
@@ -9793,6 +9798,19 @@ window.hideCalibration = async function() {
     var secs = card.querySelectorAll(".sec"); if (secs.length) secs[0].remove();
     card.insertAdjacentHTML("beforeend", h); place(card, bar);
     card.querySelector(".go").onclick = function () { var p = r.phone, nm = r.name; close(); if (typeof window.openHistoryModal === "function") window.openHistoryModal(p, nm); };
+  };
+  // 11-05: 마우스를 올리면 카드 (잠깐 머물 때만) · 막대·카드 밖으로 나가면 닫힘 · 터치 화면은 눌러서 열기
+  var canHover = window.matchMedia ? matchMedia("(hover: hover) and (pointer: fine)").matches : true;
+  window.wcResCardHover = function (ev, bar) {
+    if (!canHover) return;
+    clearTimeout(lT); clearTimeout(hT);
+    if (cur === bar) return;
+    hT = setTimeout(function () { viaHover = true; window.wcResCard(null, bar); }, 180);
+  };
+  window.wcResCardLeave = function () {
+    clearTimeout(hT);
+    if (!viaHover) return;
+    clearTimeout(lT); lT = setTimeout(function () { if (viaHover) { viaHover = false; close(); } }, 220);
   };
   document.addEventListener("click", function (e) { if (cur && !e.target.closest("#wcResCard") && !e.target.closest(".timeline-bar[data-rid]")) close(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && cur) close(); });
