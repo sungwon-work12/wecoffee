@@ -5660,7 +5660,7 @@ window.hideCalibration = async function() {
     var pj = String(phone || "").replace(/'/g, ""), nj = String(name || "").replace(/'/g, "");
     var h = '<div style="border-top:1px solid var(--border-strong,#e5e8eb);margin-top:8px;padding-top:18px;">';
     // 멤버 누적 코칭 로그 (성장 관점) — 상세 최상단
-    h += coachBlockHTML("member", phone, name, {}, "성장 코칭 로그", "역량 평가 · 코칭 포인트", { mb: "18px" });
+    h += coachBlockHTML("member", phone, name, {}, "성장 코칭 로그", "역량 평가 · 코칭 포인트", { mb: "18px", pre: cnPracticeLine(ress) });
     // ── 콘텐츠 3분류: 수업(기본 수업·1회차 → 이수 종수) / 훈련(정기 훈련·스페셜 코칭·반복 → 참여 빈도) / 이벤트(세미나·대회·일회성 → 참여 건수) ──
     var classSet = {}, trainList = [], eventList = [];
     trns.forEach(function (t) {
@@ -5715,6 +5715,19 @@ window.hideCalibration = async function() {
     // 공간 이용 통계
     h += sectionTitle("공간 이용 통계", "18px", "센터별 공간·장비");
     var usedCenters = Object.keys(zoneByCenter);
+    // 11-05: 센터·공간별 트레이닝 종류 / 로스팅한 생두 국가 (멤버가 예약 때 고른 것 · 고른 것만 셈)
+    var zoneMeta = {};
+    ress.forEach(function (r) {
+      var ck = centerKey(r.center) || String(r.center || "기타").trim() || "기타", z = resolveZone(r.center, r.space_equip); if (!z) return;
+      var m = ((zoneMeta[ck] = zoneMeta[ck] || {})[z] = zoneMeta[ck][z] || { tr: {}, bn: {} });
+      if (String(z).indexOf("로스팅") >= 0) {
+        var seen = {};
+        (Array.isArray(r.plan_beans) ? r.plan_beans : []).forEach(function (b) { var nm = b && String(b.name || "").trim(); if (!nm) return; var c = wcBeanCountry(nm); if (seen[c]) return; seen[c] = 1; m.bn[c] = (m.bn[c] || 0) + 1; });
+      } else if (/에스프레소|브루잉/.test(String(z))) {
+        var pp = String(r.purpose || "").trim(); if (pp) m.tr[pp] = (m.tr[pp] || 0) + 1;
+      }
+    });
+    function zoneSub(ck, z) { var m = zoneMeta[ck] && zoneMeta[ck][z]; if (!m) return ""; return String(z).indexOf("로스팅") >= 0 ? wcZoneSubHTML("로스팅한 생두", m.bn) : wcZoneSubHTML("트레이닝", m.tr); }
     if (!usedCenters.length) h += emptyBox("공간 이용 데이터가 없습니다.");
     else {
       usedCenters.sort(function (a, b) { return (centerCnt[b] || 0) - (centerCnt[a] || 0); }).forEach(function (ck) {
@@ -5722,7 +5735,7 @@ window.hideCalibration = async function() {
         Object.keys(counts).forEach(function (z) { if (zoneOrder.indexOf(z) < 0) zoneOrder.push(z); });
         var zMax = Math.max.apply(null, zoneOrder.map(function (z) { return counts[z] || 0; }).concat([1]));
         h += '<div style="font-size:12px;font-weight:800;color:#4e5968;margin:6px 0 8px;">' + esc(ck) + '</div>';
-        zoneOrder.sort(function (a, b) { return (counts[b] || 0) - (counts[a] || 0); }).forEach(function (z, zi) { var c = counts[z] || 0; h += barRow(z, c, zMax, false, c === 0, zi); });
+        zoneOrder.sort(function (a, b) { return (counts[b] || 0) - (counts[a] || 0); }).forEach(function (z, zi) { var c = counts[z] || 0; h += barRow(z, c, zMax, false, c === 0, zi, c ? zoneSub(ck, z) : ""); });
       });
     }
     // ── 역량 성장(센서리·로스팅·추출) — 커핑12 성장 랭킹과 동일 계산(wcGrowthCompute) 재사용. 비동기 주입. ──
@@ -5900,7 +5913,37 @@ window.hideCalibration = async function() {
   function cnEquip(s){ var m=String(s||"").match(/\(([^)]*)\)/); return m?m[1].trim():String(s||"").trim(); }
   function cnJoin(){ return Array.prototype.slice.call(arguments).filter(Boolean).join(" · "); }
   function cnTime(s){ try { var d = new Date(s); if (isNaN(d)) return ""; return String(d.getFullYear()).slice(2) + "." + String(d.getMonth()+1).padStart(2,"0") + "." + String(d.getDate()).padStart(2,"0") + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); } catch (e) { return ""; } }
-  // ctx = {sessionId, beanId, refId} · opts = {ph, mb, label}
+  // 11-05: 코멘트 입력칸 위 '최근 4주 연습' 한 줄 — 멤버가 예약 때 고른 트레이닝 종류 · 로스팅 생두 (클릭·펼침 없음, 해당 예약 없으면 숨김)
+  function cnPracticeLine(ress){
+    try {
+      var now = new Date(), t1 = new Date(now.getFullYear(), now.getMonth(), now.getDate()), t0 = new Date(t1.getTime() - 27 * 864e5);
+      var Z = { "에스프레소존": { n: 0, p: {}, none: 0 }, "브루잉존": { n: 0, p: {}, none: 0 }, "로스팅존": { n: 0, b: {}, nb: 0 } };
+      (ress || []).forEach(function (r) {
+        var ds = String(r.res_date || "").split("T")[0].split("-"); if (ds.length < 3) return;
+        var d = new Date(+ds[0], +ds[1] - 1, +ds[2]); if (isNaN(d) || d < t0 || d > t1) return;
+        var sp = String(r.space_equip || ""), z = sp.indexOf("로스팅") >= 0 ? "로스팅존" : sp.indexOf("에스프레소") >= 0 ? "에스프레소존" : sp.indexOf("브루잉") >= 0 ? "브루잉존" : "";
+        if (!z) return; var o = Z[z]; o.n++;
+        if (z === "로스팅존") {
+          var bs = Array.isArray(r.plan_beans) ? r.plan_beans : [];
+          bs.forEach(function (b) { var nm = b && String(b.name || "").trim(); if (!nm) return; var k = nm.replace(/\s+/g, "").toLowerCase(); if (!o.b[k]) { o.b[k] = 1; o.nb++; } });
+        } else {
+          var pp = String(r.purpose || "").trim(); if (pp) o.p[pp] = (o.p[pp] || 0) + 1; else o.none++;
+        }
+      });
+      var parts = [];
+      ["에스프레소존", "브루잉존"].forEach(function (z) {
+        var o = Z[z]; if (!o.n) return;
+        var ks = Object.keys(o.p).sort(function (a, b) { return o.p[b] - o.p[a]; });
+        var inner = ks.map(function (k) { return esc(k) + " " + o.p[k]; });
+        if (o.none) inner.push('<span style="color:#b0b8c1;">선택 안 함 ' + o.none + '</span>');
+        parts.push(z + " " + o.n + "회 (" + inner.join(" · ") + ")");
+      });
+      if (Z["로스팅존"].n) parts.push("로스팅존 " + Z["로스팅존"].n + "회" + (Z["로스팅존"].nb ? " (생두 " + Z["로스팅존"].nb + "종)" : ""));
+      if (!parts.length) return "";
+      return '<p style="font-size:12.5px;color:#4e5968;line-height:1.6;margin:0 0 10px;word-break:keep-all;"><b style="color:#191f28;">최근 4주 연습</b> · ' + parts.join(" · ") + '</p>';
+    } catch (e) { return ""; }
+  }
+  // ctx = {sessionId, beanId, refId} · opts = {ph, mb, label, pre}
   function coachBlockHTML(scope, phone, name, ctx, title, sub, opts){
     ctx = ctx || {}; opts = opts || {};
     var key = cnKey(scope, ctx.sessionId, ctx.beanId, ctx.refId);
@@ -5912,7 +5955,7 @@ window.hideCalibration = async function() {
     return '<div style="border:1px solid var(--border-strong,#e5e8eb);border-radius:12px;padding:12px 14px;margin-bottom:' + mb + ';background:#fbfcfd;">' +
       (title ? '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;"><span style="font-size:13px;font-weight:800;color:#191f28;">' + title + '</span>' + (sub ? '<span style="font-size:11px;color:#8b95a1;">' + sub + '</span>' : '') + '</div>' : '') +
       '<div id="' + listId + '"><div style="color:#b0b8c1;font-size:12.5px;padding:2px 0;">불러오는 중…</div></div>' +
-      '<div style="margin-top:10px;">' +
+      '<div style="margin-top:10px;">' + (opts.pre || '') +
         '<textarea id="' + taId + '"' + labelAttr + ' rows="2" placeholder="' + ph + '" style="width:100%;resize:vertical;min-height:38px;padding:8px 10px;border:1px solid var(--border-strong,#e5e8eb);border-radius:8px;font-size:13px;font-family:inherit;line-height:1.5;box-sizing:border-box;"></textarea>' +
         // 성장 평가 = 코멘트와 한 세트(항상 표시). 라벨 + 역량 pills + 점수(선택 입력)
         '<div id="cnEvalWrap_' + key + '" data-dom="" style="margin-top:8px;padding:11px 12px;border:1px solid #eef0f3;border-radius:8px;background:#fff;">' +
@@ -6273,11 +6316,35 @@ window.hideCalibration = async function() {
     var dots = vals.map(function (v, i) { var last = i === n - 1; return '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="' + (last ? 3.5 : 2.3) + '" fill="' + (last ? "#ff7900" : "#fff") + '" stroke="#ff7900" stroke-width="2"/>'; }).join("");
     return '<svg width="' + w + '" height="' + hgt + '" viewBox="0 0 ' + w + ' ' + hgt + '" style="max-width:100%;height:auto;display:block;"><path d="' + area + '" fill="rgba(255,121,0,0.08)"/><polyline points="' + pts + '" fill="none" stroke="#ff7900" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' + dots + '</svg>';
   }
-  function barRow(label, val, max, isPct, dim, idx) {
+  function barRow(label, val, max, isPct, dim, idx, sub) {
     var pct = isPct ? val : (max ? Math.round(val / max * 100) : 0);
     var right = isPct ? val + "%" : val + "회";
     var delay = 'animation-delay:' + (Math.min(idx || 0, 8) * 0.06).toFixed(2) + 's;';
-    return '<div style="margin-bottom:12px;' + (dim ? 'opacity:.45;' : '') + '"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#191f28;margin-bottom:6px;"><span>' + esc(label) + '</span><span>' + right + '</span></div><div style="height:9px;background:#eef0f3;border-radius:5px;overflow:hidden;"><div class="wcMDbar" style="' + delay + 'height:100%;width:' + pct + '%;background:' + __wcGrad('#ff7900') + ';border-radius:5px;"></div></div></div>';
+    return '<div style="margin-bottom:12px;' + (dim ? 'opacity:.45;' : '') + '"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#191f28;margin-bottom:6px;"><span>' + esc(label) + '</span><span>' + right + '</span></div><div style="height:9px;background:#eef0f3;border-radius:5px;overflow:hidden;"><div class="wcMDbar" style="' + delay + 'height:100%;width:' + pct + '%;background:' + __wcGrad('#ff7900') + ';border-radius:5px;"></div></div>' + (sub || '') + '</div>';
+  }
+  // 11-05: 공간 이용 통계 막대 아래 한 줄 — 에스프레소존·브루잉존 '트레이닝' 종류, 로스팅존 '로스팅한 생두' 국가 (클릭 없음, 전부 표시)
+  var WC_BEAN_COUNTRY = [
+    ["에티오피아", ["에티오피아", "ethiopia"]], ["케냐", ["케냐", "kenya"]], ["르완다", ["르완다", "rwanda"]], ["부룬디", ["부룬디", "burundi"]],
+    ["탄자니아", ["탄자니아", "tanzania"]], ["우간다", ["우간다", "uganda"]], ["콩고", ["콩고", "congo"]], ["말라위", ["말라위", "malawi"]],
+    ["잠비아", ["잠비아", "zambia"]], ["예멘", ["예멘", "yemen"]],
+    ["콜롬비아", ["콜롬비아", "colombia"]], ["브라질", ["브라질", "brazil"]], ["과테말라", ["과테말라", "guatemala"]], ["코스타리카", ["코스타리카", "costa rica", "costarica"]],
+    ["파나마", ["파나마", "panama"]], ["엘살바도르", ["엘살바도르", "엘 살바도르", "el salvador", "salvador"]], ["온두라스", ["온두라스", "honduras"]], ["니카라과", ["니카라과", "nicaragua"]],
+    ["멕시코", ["멕시코", "mexico"]], ["페루", ["페루", "peru"]], ["볼리비아", ["볼리비아", "bolivia"]], ["에콰도르", ["에콰도르", "ecuador"]],
+    ["자메이카", ["자메이카", "jamaica"]], ["도미니카", ["도미니카", "dominica"]], ["하와이", ["하와이", "hawaii"]],
+    ["파푸아뉴기니", ["파푸아뉴기니", "파푸아 뉴기니", "papua"]], ["인도네시아", ["인도네시아", "indonesia", "수마트라", "sumatra", "술라웨시", "sulawesi", "자바", "java", "발리", "bali", "플로레스", "flores"]],
+    ["인도", ["인도", "india"]], ["베트남", ["베트남", "vietnam"]], ["미얀마", ["미얀마", "myanmar"]], ["중국", ["중국", "윈난", "운남", "yunnan", "china"]],
+    ["태국", ["태국", "thailand"]], ["라오스", ["라오스", "laos"]], ["동티모르", ["동티모르", "티모르", "timor"]], ["필리핀", ["필리핀", "philippines"]], ["네팔", ["네팔", "nepal"]]
+  ];
+  function wcBeanCountry(name) {
+    var n = String(name || "").toLowerCase();
+    for (var i = 0; i < WC_BEAN_COUNTRY.length; i++) { var al = WC_BEAN_COUNTRY[i][1]; for (var j = 0; j < al.length; j++) if (n.indexOf(al[j]) >= 0) return WC_BEAN_COUNTRY[i][0]; }
+    return "기타";
+  }
+  function wcZoneSubHTML(label, cnt) {
+    var ks = Object.keys(cnt || {}); if (!ks.length) return "";
+    ks.sort(function (a, b) { return (a === "기타") - (b === "기타") || cnt[b] - cnt[a]; });
+    return '<div style="font-size:12px;color:#8b95a1;margin-top:6px;line-height:1.5;word-break:keep-all;">' + label + ' · ' +
+      ks.map(function (k) { return esc(k) + ' <b style="color:#4e5968;font-weight:700;">' + cnt[k] + '</b>'; }).join(' · ') + '</div>';
   }
   function listItem(title, date) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #eef0f3;border-radius:10px;margin-bottom:6px;"><div style="min-width:0;font-size:13px;font-weight:600;color:#191f28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(title) + '</div><div style="font-size:12px;color:#8b95a1;flex-shrink:0;">' + esc(date) + '</div></div>';
