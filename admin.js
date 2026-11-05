@@ -5966,12 +5966,10 @@ window.hideCalibration = async function() {
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;"><span style="display:inline-flex;align-items:center;gap:6px;min-width:0;">' + scoreBadge + '<span style="font-size:11px;color:#8b95a1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(n.author_name || n.author_email || "관리자") + ' · ' + cnTime(n.created_at) + '</span></span>' +
           '<span style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0;">' + visBadge +
           // 10-28: 수정 추가 · 삭제는 확인 후 (예전엔 연한 회색 글자라 잘 안 보였음)
-          (n.resolved_at ? '' : '<button type="button" onclick="window.memCoachResolve(this,' + idq + ',true,' + ctxArgs + ')" style="border:none;background:none;color:#16a34a;font-size:12px;font-weight:700;cursor:pointer;padding:0;">해결됨</button>') +   /* 11-05 */
           '<button type="button" onclick="window.memCoachEdit(this,' + idq + ',' + ctxArgs + ')" style="border:none;background:none;color:#4e5968;font-size:12px;font-weight:700;cursor:pointer;padding:0;">수정</button>' +
           '<button type="button" onclick="window.memCoachDelete(' + idq + ',' + ctxArgs + ')" style="border:none;background:none;color:#f04452;font-size:12px;font-weight:700;cursor:pointer;padding:0;">삭제</button></span></div>' +
           '<div class="cnNote" style="font-size:13.5px;color:#191f28;white-space:pre-wrap;line-height:1.55;">' + esc(n.note) + '</div>' +
           (n.edited_at ? '<div style="font-size:11px;color:#b0b8c1;margin-top:3px;">수정됨 · ' + cnTime(n.edited_at) + '</div>' : '') +
-          (n.resolved_at ? '<div style="margin-top:8px;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px;font-size:12.5px;line-height:1.5;color:#191f28;display:flex;gap:8px;align-items:flex-start;"><b style="color:#16a34a;flex-shrink:0;">해결됨 · ' + Math.max(0, Math.round((new Date(n.resolved_at) - new Date(n.created_at)) / 864e5)) + '일</b><span style="flex:1;min-width:0;white-space:pre-wrap;">' + esc(n.resolved_note || "") + '</span><button type="button" onclick="window.memCoachResolve(this,' + idq + ',false,' + ctxArgs + ')" style="border:none;background:none;color:#8b95a1;font-size:11.5px;font-weight:700;cursor:pointer;padding:0;flex-shrink:0;">해제</button></div>' : '') +   /* 11-05 */
         '</div>';
       }).join("");
     } catch (e) { console.warn("[coach] 로드 실패", e); el.innerHTML = '<div style="color:#e5484d;font-size:12.5px;">코멘트를 불러오지 못했습니다.</div>'; }
@@ -6035,33 +6033,6 @@ window.hideCalibration = async function() {
       if (scope === "__growth") { try { await window.memCoachRefresh("member", gp, null); } catch (e) {} }
     }
   }
-  /* 11-05: 코멘트 '해결됨' 표시 — RPC coach_note_resolve (30_코칭코멘트_해결됨.sql) · 성장 리포트·성장 카드에 쓰임 */
-  window.memCoachResolve = function (btn, id, on, scope, phone, sessionId, beanId, refId) {
-    var run = async function (note) {
-      try {
-        var res = await supabaseClient.rpc("coach_note_resolve", { p_id: String(id), p_on: !!on, p_note: note || null });
-        if (res.error) throw res.error;
-        if (typeof showToast === "function") showToast(on ? "해결됨으로 표시했어요." : "해결됨을 해제했어요.");
-        await cnAfterChange(scope, phone, sessionId, beanId, refId);
-        try { if (window.wcReportRefresh) window.wcReportRefresh(phone); } catch (e2) {}
-        try { if (window.wcGrowthExtra) window.wcGrowthExtra.reset(); } catch (e4) {}
-      } catch (e) {
-        console.warn("[coach] 해결 표시 실패", e);
-        try { var sv = btn.closest(".cnItem") && btn.closest(".cnItem").querySelector(".cnRs"); if (sv) sv.disabled = false; } catch (e3) {}
-        var m = String(e && e.message || "");
-        if (typeof showToast === "function") showToast(/coach_note_resolve|PGRST202|does not exist/i.test(m) ? "서버 준비 전이에요. SQL 30을 먼저 실행해 주세요." : (/unauthorized/i.test(m) ? "로그인 세션이 만료됐어요." : "처리하지 못했어요."));
-      }
-    };
-    if (!on) { run(null); return; }
-    var item = btn.closest(".cnItem"); if (!item || item.querySelector(".cnResBox")) return;
-    var box = document.createElement("div"); box.className = "cnResBox"; box.style.marginTop = "8px";
-    box.innerHTML = '<textarea rows="2" placeholder="어떻게 해결됐나요? (선택 · 성장 리포트와 카드에 보여요)" style="width:100%;resize:vertical;min-height:44px;padding:8px 10px;border:1px solid #16a34a;border-radius:8px;font-size:13px;font-family:inherit;line-height:1.5;box-sizing:border-box;outline:none;"></textarea>' +
-      '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px;"><button type="button" class="cnRc" style="height:32px;padding:0 12px;border:1px solid #e5e8eb;border-radius:8px;background:#fff;color:#4e5968;font-size:12.5px;font-weight:700;cursor:pointer;">취소</button>' +
-      '<button type="button" class="cnRs" style="height:32px;padding:0 14px;border:none;border-radius:8px;background:#16a34a;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">해결됨으로 저장</button></div>';
-    item.appendChild(box); box.querySelector("textarea").focus();
-    box.querySelector(".cnRc").onclick = function () { box.remove(); };
-    box.querySelector(".cnRs").onclick = function () { this.disabled = true; run(box.querySelector("textarea").value.trim()); };
-  };
   // 10-28: 코멘트 내용 수정 (인라인) — RPC coach_note_update (03_코칭코멘트_수정.sql)
   window.memCoachEdit = function (btn, id, scope, phone, sessionId, beanId, refId) {
     var item = btn.closest(".cnItem"); if (!item) return;
@@ -7101,7 +7072,7 @@ window.hideCalibration = async function() {
     return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:0;">' +
       '<select id="wcGrowthBatch" style="height:34px;border:1px solid #e5e8eb;border-radius:9px;font-size:12.5px;font-weight:700;padding:0 30px 0 12px;background:#fff url(data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2212%22%20height=%2212%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%238b95a1%22%20stroke-width=%222.4%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpolyline%20points=%226%209%2012%2015%2018%209%22/%3E%3C/svg%3E) no-repeat right 10px center;background-size:12px;color:#191f28;font-family:inherit;cursor:pointer;appearance:none;-webkit-appearance:none;-moz-appearance:none;">' + opts + '</select>' +
       '<div style="display:inline-flex;background:#f2f4f6;border-radius:10px;padding:3px;">' + seg + '</div>' +
-      '<select id="wcGrowthSort" style="' + selStyle() + 'margin-left:auto;"><option value="g"' + (_sortMode === "g" ? " selected" : "") + '>성장순</option><option value="h"' + (_sortMode === "h" ? " selected" : "") + '>레퍼런스 컵노트 적중 성장순</option><option value="s"' + (_sortMode === "s" ? " selected" : "") + '>센서리 정확도 성장순</option><option value="k"' + (_sortMode === "k" ? " selected" : "") + '>역량 점수 성장순</option><option value="r"' + (_sortMode === "r" ? " selected" : "") + '>해결된 코칭 많은 순</option><option value="c"' + (_sortMode === "c" ? " selected" : "") + '>확인한 지 오래된 순</option></select>' +
+      '<select id="wcGrowthSort" style="' + selStyle() + 'margin-left:auto;"><option value="g"' + (_sortMode === "g" ? " selected" : "") + '>성장순</option><option value="h"' + (_sortMode === "h" ? " selected" : "") + '>레퍼런스 컵노트 적중 성장순</option><option value="s"' + (_sortMode === "s" ? " selected" : "") + '>센서리 정확도 성장순</option><option value="k"' + (_sortMode === "k" ? " selected" : "") + '>역량 점수 성장순</option><option value="c"' + (_sortMode === "c" ? " selected" : "") + '>확인한 지 오래된 순</option></select>' +
     '</div>';
   }
   // 필터·정렬 적용 후 전체 본문(필터바+안내+리스트) 반환
@@ -7111,7 +7082,8 @@ window.hideCalibration = async function() {
     var pool = base.filter(function (m) { return _rateFilter === "all" || rateBand(m.phone) === _rateFilter; });
     var staleN = pool.filter(function (m) { return isStale(m.phone); }).length;
     if (_staleOnly) pool = pool.filter(function (m) { return isStale(m.phone); });
-    if (XMODES[_sortMode]) {   // 11-05: 레퍼런스 컵노트 적중 · 센서리 정확도 · 역량 점수 · 해결된 코칭
+    if (_sortMode === "r") _sortMode = "g";   // 11-05: '해결된 코칭 많은 순'은 뺐음
+    if (XMODES[_sortMode]) {   // 11-05: 레퍼런스 컵노트 적중 · 센서리 정확도 · 역량 점수
       var X = window.wcGrowthExtra, XM = XMODES[_sortMode], ready = !!(X && X.get("") !== null);
       var xv = function (m) { var x = X.get(m.phone) || {}; if (XM.long && !(XM.n(x) >= 3)) return null; return XM.val(x); };
       var hx = filterBarHTML() + filterRow2HTML(base, staleN) +
@@ -7299,9 +7271,7 @@ window.hideCalibration = async function() {
     s: { t: "센서리 정확도", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "처음 3회와 최근 3회의 센서리 편차를 비교해요 · 편차가 줄어든 만큼 위로 · " + XLONG, long: 1, n: function (x) { return (x.sens && x.sens.n) || 0; }, empty: "비교할 센서리 기록이 쌓인 멤버가 아직 없어요.", left: "센서리 기록이 3회보다 적은 멤버",
       val: function (x) { var k = x.sens; return (k && k.e != null && k.r != null) ? k.e - k.r : null; } },
     k: { t: "역량 점수", tail: "성장 폭이 큰 순으로 정렬했어요.", sub: "처음 3회와 최근 3회의 교육 매니저 점수를 비교해요 · 가장 많이 오른 역량 기준 · " + XLONG, long: 1, n: function (x) { return (x.sc && x.sc.n) || 0; }, empty: "비교할 역량 점수가 쌓인 멤버가 아직 없어요.", left: "역량 점수가 3회보다 적은 멤버",
-      val: function (x) { return x.sc ? x.sc.imp : null; } },
-    r: { t: "해결된 코칭", tail: "이 많은 순으로 정렬했어요.", sub: "코칭 코멘트에 '해결됨'을 표시한 건수예요", long: 0, empty: "아직 해결된 코칭이 없어요. 코멘트에서 '해결됨'을 누르면 여기 잡혀요.", left: "해결된 코칭이 없는 멤버",
-      val: function (x) { return x.res || null; } }
+      val: function (x) { return x.sc ? x.sc.imp : null; } }
   };
   var _ruleOpen = false;
   function ruleBtn() { return window.wcGrowthRuleHTML ? ' <button type="button" class="wcgr-rule-b" data-grrule="1">계산 기준</button>' : ''; }
@@ -7321,7 +7291,7 @@ window.hideCalibration = async function() {
     out.push('<span class="it">레퍼런스 컵노트 ' + pair(x.hit, Math.round, false, "%") + '</span>');
     out.push('<span class="it">센서리 편차 ' + pair(x.sens, xr1, true) + '</span>');
     out.push('<span class="it">역량 점수' + (x.sc ? ' · ' + esc(x.sc.dom) + ' ' + pair(x.sc, xr1) : ' ' + M) + '</span>');
-    out.push('<span class="it">해결된 코칭 ' + (x.res ? '<b>' + x.res + '건</b>' : M) + '</span>');
+    out.push('<span class="it">코칭 뒤 오른 점수 ' + (x.res ? '<b>' + x.res + '건</b>' : M) + '</span>');
     return out.join(S);
   }
   function exRefresh() {
@@ -8919,11 +8889,11 @@ window.hideCalibration = async function() {
    WeCoffee Admin · 커핑 14 — 성장 리포트 · 멤버별 성장 지표 · 성장 카드 (11-05)
    · 멤버 상세 맨 위 #wcMemReport : 비교(첫 4주 → 마지막 4주 · 마지막 기록 기준 / 지난달 → 이번 달) · 성장 현황 펼침에도 같은 블록
        레퍼런스 컵노트 중 짚은 비율 · 센서리 정확도 편차 · 한 컵에 적은 노트 수 · 역량 점수
-       레퍼런스 컵노트 적중 추이 · 해결된 코칭(코멘트 '해결됨' · SQL 30) · 해당 멤버의 성장 과정 카드로 보기
-   · 성장 현황 › 멤버별 성장 : window.wcGrowthExtra (레퍼런스 컵노트 적중 · 해결된 코칭) — 정렬·한 줄·성장 카드 버튼
+       레퍼런스 컵노트 적중 추이 · 코칭 뒤 오른 점수(같은 역량 점수 코멘트가 앞보다 오른 묶음 · 자동) · 해당 멤버의 성장 과정 카드로 보기
+   · 성장 현황 › 멤버별 성장 : window.wcGrowthExtra (레퍼런스 컵노트 적중 · 센서리 · 역량 점수 · 오른 점수) — 정렬·한 줄·성장 카드 버튼
    · 성장 카드 창 #wcGcOly : 한 장(센서리·로스팅 코칭·함께 커핑) / 넘겨 보기 5장 · 이름 가리기 · 이미지 저장(4:5 · 1080×1350)
    의존: supabaseClient · 커핑 13(wcNoteData·wcNoteGrowthCompute·wcNoteBulk) · 커핑 8(openHistoryModal)
-   서버: coach_notes(+resolved_* · SQL 30) · member_sensory_series RPC · cupping_* · reservations
+   서버: coach_notes · member_sensory_series RPC · cupping_* · reservations  (11-05: 해결됨 표시는 뺐음 · SQL 30 칸은 안 씀)
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -9021,29 +8991,42 @@ window.hideCalibration = async function() {
     Object.keys(score).forEach(function (dom) { var k = cmp(score[dom], w); if (k.e == null || k.r == null) return; var imp = k.r - k.e; if (!best || imp > best.imp) best = { dom: dom, e: k.e, r: k.r, imp: imp, ne: k.ne, nr: k.nr, n: k.n, k: k.k, ea: k.ea, eb: k.eb, ra: k.ra, rb: k.rb }; });
     return best;
   }
-  /* 해결된 코칭: 원래 코멘트 → (예약 코멘트면) 같은 생두 로스팅·커핑 횟수 → 해결 */
-  async function resolvedItems(g) {
-    var list = g.notes.filter(function (n) { return n.resolved_at; });
+  /* 11-05: 코칭 뒤 오른 점수 — 같은 역량에 남긴 점수 코멘트가 앞보다 오르면 앞·뒤 코멘트를 한 묶음으로 (근무자가 따로 누를 것 없음) */
+  function scorePairs(notes) {
+    var by = {};
+    (notes || []).forEach(function (n) { if (n.score == null || n.score === "" || !n.eval_domain) return; (by[n.eval_domain] = by[n.eval_domain] || []).push(n); });
+    var out = [];
+    Object.keys(by).forEach(function (dom) {
+      var l = by[dom].slice().sort(function (a, b) { return ts(a.created_at) - ts(b.created_at); });
+      for (var i = 1; i < l.length; i++) if (Number(l[i].score) > Number(l[i - 1].score)) out.push({ dom: dom, a: l[i - 1], b: l[i] });
+    });
+    return out.sort(function (x, y) { return ts(y.b.created_at) - ts(x.b.created_at); });
+  }
+  /* 앞 코멘트가 예약 코멘트면 그 사이 같은 생두 로스팅·커핑 횟수도 */
+  async function riseItems(g) {
+    var list = scorePairs(g.notes);
     if (!list.length) return [];
     var resById = {}; g.res.forEach(function (r) { resById[String(r.id)] = r; });
     var out = [];
     for (var i = 0; i < list.length; i++) {
-      var n = list[i], a = ts(n.created_at), b = ts(n.resolved_at), item = { n: n, days: Math.max(0, Math.round((b - a) / DAY)), roasts: null, cups: null, bean: "" };
-      var base = n.scope === "reservation" ? resById[String(n.ref_id)] : null;
+      var pr = list[i], a = ts(pr.a.created_at), b = ts(pr.b.created_at);
+      var item = { dom: pr.dom, a: pr.a, b: pr.b, days: Math.max(0, Math.round((b - a) / DAY)), roasts: null, cups: null, bean: "" };
+      var base = pr.a.scope === "reservation" ? resById[String(pr.a.ref_id)] : null;
       var names = base ? beanNames(base).map(nk) : [];
       if (names.length) {
         item.bean = beanNames(base)[0];
         var same = g.res.filter(function (r) { var t = ts(r.res_date); return t >= ts(base.res_date) && t <= b + DAY && beanNames(r).some(function (x) { return names.indexOf(nk(x)) >= 0; }); });
-        if (same.length < 2) { out.push(item); continue; }   // 다시 볶은 기록이 없으면 과정 줄 없이
-        item.roasts = same.length; item.resList = same.sort(function (x, y) { return ts(x.res_date) - ts(y.res_date); });
-        try {
-          var q = await sb().from("cupping_beans").select("id,session_id,roast_reservation_id").in("roast_reservation_id", same.map(function (r) { return r.id; }));
-          var ss = {}; (q.data || []).forEach(function (x) { ss[x.session_id] = 1; }); item.cups = Object.keys(ss).length;
-        } catch (e) { item.cups = null; }
+        if (same.length >= 2) {
+          item.roasts = same.length; item.resList = same.sort(function (x, y) { return ts(x.res_date) - ts(y.res_date); });
+          try {
+            var q = await sb().from("cupping_beans").select("id,session_id,roast_reservation_id").in("roast_reservation_id", same.map(function (r) { return r.id; }));
+            var ss = {}; (q.data || []).forEach(function (x) { ss[x.session_id] = 1; }); item.cups = Object.keys(ss).length;
+          } catch (e) { item.cups = null; }
+        }
       }
       out.push(item);
     }
-    return out.sort(function (x, y) { return ts(y.n.resolved_at) - ts(x.n.resolved_at); });
+    return out;
   }
   /* 함께 커핑: 내가 볶은 원두(roast_reservation_id)를 다른 참가자가 평가한 세션 중 참가자가 가장 많은 것 */
   async function peerCupping(g) {
@@ -9178,16 +9161,17 @@ window.hideCalibration = async function() {
     });
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;">' + h + '</svg>';
   }
-  function resolvedHTML(items) {
+  function riseHTML(items) {
     if (!items) return '<div class="wrp-em">불러오는 중…</div>';
-    if (!items.length) return '<div class="wrp-em">해결된 코칭이 없어요. 코멘트에서 \'해결됨\'을 누르면 여기 모여요.</div>';
-    return items.map(function (it, i) {
-      var n = it.n, who = n.author_name || "교육 매니저";
+    if (!items.length) return '<div class="wrp-em">아직 없어요. 같은 역량에 점수를 남긴 코멘트가 앞보다 오르면 여기 모여요.</div>';
+    var more = items.length > 5 ? '<div class="wrp-em" style="padding:10px 0 0;text-align:left;">외 ' + (items.length - 5) + '건</div>' : '';
+    return items.slice(0, 5).map(function (it, i) {
+      var A = it.a, B = it.b;
       var mid = it.roasts ? '<div class="wrp-ti"><div class="t">' + mdw(ts(it.resList[0].res_date)) + ' → ' + mdw(ts(it.resList[it.resList.length - 1].res_date)) + '</div><div class="x">같은 생두로 로스팅 ' + it.roasts + '회' + (it.cups ? ' · 커핑 ' + it.cups + '회' : '') + '</div></div>' : '';
       return (i ? '<div class="wrp-sep"></div>' : '') + '<div class="wrp-tl">' +
-        '<div class="wrp-ti c"><div class="t">' + mdw(ts(n.created_at)) + ' · ' + esc(who) + '</div><div class="x">' + esc(n.note) + '</div></div>' + mid +
-        '<div class="wrp-ti ok"><div class="t">' + mdw(ts(n.resolved_at)) + '</div><div class="wrp-ok"><b>해결됨 · ' + it.days + '일</b>' + esc(n.resolved_note || "") + '</div></div></div>';
-    }).join("");
+        '<div class="wrp-ti c"><div class="t">' + mdw(ts(A.created_at)) + ' · ' + esc(A.author_name || "교육 매니저") + ' · ' + esc(it.dom) + ' ' + esc(A.score) + '/10</div><div class="x">' + esc(A.note) + '</div></div>' + mid +
+        '<div class="wrp-ti ok"><div class="t">' + mdw(ts(B.created_at)) + ' · ' + esc(B.author_name || "교육 매니저") + '</div><div class="wrp-ok"><b>' + esc(it.dom) + ' ' + esc(A.score) + ' → ' + esc(B.score) + ' · ' + it.days + '일</b>' + esc(B.note || "") + '</div></div></div>';
+    }).join("") + more;
   }
   function paintReport(el, g, name) {
     var mode = _repMode[g.phone] || "j", now = Date.now(), w = windows(mode, g.t0, now, g.t1);
@@ -9199,8 +9183,8 @@ window.hideCalibration = async function() {
       : "지난달 " + mdw(w.e0) + " ~ " + mdw(w.e1 - DAY) + " · 이번 달 " + mdw(w.r0) + " ~ 오늘 · 그 달의 기록 평균";
     h += '<div class="wrp-per">' + esc(per) + ' <button type="button" class="wrp-rule-b" data-wrp-rule>계산 기준</button></div><div class="wrp-rule" hidden>' + window.wcGrowthRuleHTML() + '</div>';
     var sc = bestScore(g.score, w), sk = cmp(g.sens, w), vb = vocabOf(g, w);
-    var resN = g.notes.filter(function (n) { var t = ts(n.resolved_at); return t && (mode === "j" || (t >= w.r0 && t < w.r1)); });
-    var resDom = {}; resN.forEach(function (n) { var k = n.eval_domain || "기타"; resDom[k] = (resDom[k] || 0) + 1; });
+    var resN = scorePairs(g.notes).filter(function (x) { var t = ts(x.b.created_at); return mode === "j" || (t >= w.r0 && t < w.r1); });
+    var resDom = {}; resN.forEach(function (x) { resDom[x.dom] = (resDom[x.dom] || 0) + 1; });
     h += '<div class="wrp-m">' +
       metricCard("레퍼런스 컵노트 중 짚은 비율", cmp(g.hit, w), { w: w, fmt: function (v) { return Math.round(v) + "%"; }, dfmt: function (d) { return Math.round(d) + "%p"; }, sub: "커핑 " + g.hit.length + "회 기준" }) +
       metricCard("센서리 정확도", cmp(g.acc, w), { w: w, sub: (sk.e != null && sk.r != null) ? "편차 " + r1(sk.e) + " → " + r1(sk.r) + " · 레퍼런스 점수와의 차이" + (sk.r < sk.e ? "가 줄었어요" : "") : "10점 만점 · 커핑 편차로 계산" }) +
@@ -9209,11 +9193,11 @@ window.hideCalibration = async function() {
       metricCard("한 컵에 적은 노트 수", cmp(g.cnt, w), { w: w, fmt: function (v) { return r1(v) + "개"; }, dfmt: function (d) { return r1(d) + "개"; }, sub: "평균" }) +
       (vb.total ? metricCard("표현 범위", { e: vb.before, r: vb.total, n: 2 }, { w: w, noCnt: 1, fmt: function (v) { return v + "가지"; }, dfmt: function (d) { return String(d); }, sub: "지금까지 쓴 노트 표현 · " + vb.lbl + "에 새로 쓴 것" })
           : '<div class="wrp-c"><div class="l">표현 범위</div><div class="em">아직 기록이 없어요</div></div>') +
-      '<div class="wrp-c"><div class="l">해결된 코칭</div><div class="v"><span class="b">' + resN.length + '건</span></div><div class="s">' + (resN.length ? esc(Object.keys(resDom).map(function (k) { return k + " " + resDom[k] + "건"; }).join(" · ")) : (mode === "m" ? "이번 달 해결된 코칭이 없어요" : "코멘트에 '해결됨'을 누르면 잡혀요")) + '</div></div>' +
+      '<div class="wrp-c"><div class="l">코칭 뒤 오른 점수</div><div class="v"><span class="b">' + resN.length + '건</span></div><div class="s">' + (resN.length ? esc(Object.keys(resDom).map(function (k) { return k + " " + resDom[k] + "건"; }).join(" · ")) : (mode === "m" ? "이번 달에 오른 점수가 없어요" : "같은 역량 점수가 앞 코멘트보다 오른 횟수")) + '</div></div>' +
       '</div>';
     if (g.hit.length >= 2) h += '<div class="wrp-t"><b>레퍼런스 컵노트 적중 추이</b><span>커핑 회차별</span></div><div class="wrp-box">' + trendSVG(g.hit) + '</div>';
     h += noteGroupsHTML(g, w);
-    h += '<div class="wrp-t"><b>해결된 코칭</b><span>코멘트에 \'해결됨\'을 누르면 여기 모여요</span></div><div class="wrp-box" data-wrp-res>' + resolvedHTML(g.resolved) + '</div>';
+    h += '<div class="wrp-t"><b>코칭 뒤 오른 점수</b><span>같은 역량에 남긴 점수가 앞 코멘트보다 오른 경우</span></div><div class="wrp-box" data-wrp-res>' + riseHTML(g.rises) + '</div>';
     h += '<div class="wrp-foot"><button type="button" class="wrp-btn" data-wrp-card>해당 멤버의 성장 과정 카드로 보기</button></div>';
     el.innerHTML = h;
   }
@@ -9232,9 +9216,9 @@ window.hideCalibration = async function() {
       var g = await gather(phone); g.name = name;
       if (!document.body.contains(el)) return;
       paintReport(el, g, name);
-      g.resolved = await resolvedItems(g).catch(function () { return []; });
+      g.rises = await riseItems(g).catch(function () { return []; });
       if (!document.body.contains(el)) return;
-      var rb = el.querySelector("[data-wrp-res]"); if (rb) rb.innerHTML = resolvedHTML(g.resolved);
+      var rb = el.querySelector("[data-wrp-res]"); if (rb) rb.innerHTML = riseHTML(g.rises);
     } catch (e) { console.warn("[성장 리포트] 불러오기 실패", e); if (document.body.contains(el)) el.innerHTML = ""; }
   };
   /* 11-05: 계산 기준 — 성장 리포트 · 성장 현황에서 같이 씀 */
@@ -9246,7 +9230,7 @@ window.hideCalibration = async function() {
       ["역량 점수", "교육 매니저가 코멘트에 남긴 10점 만점 점수예요. 여러 역량 중 가장 많이 오른 역량을 보여 줘요."],
       ["한 컵에 적은 노트 수", "커핑 1회에서 원두 한 컵마다 적은 노트 수의 평균이에요."],
       ["표현 범위", "지금까지 쓴 노트 표현의 가짓수예요. 옆 숫자는 최근 구간에 처음 쓴 표현 수예요."],
-      ["해결된 코칭", "코칭 코멘트에 '해결됨'을 표시한 건수예요."],
+      ["코칭 뒤 오른 점수", "같은 역량(센서리 · 로스팅 · 추출)에 점수를 남긴 코멘트가 바로 앞 코멘트보다 오른 횟수예요. 앞·뒤 코멘트를 한 묶음으로 보여 줘요. 따로 표시할 건 없어요."],
       ["성장순", "센서리 · 로스팅 · 추출 역량별 개선폭(최근 − 처음)의 평균이에요. 역량별로 3회 이상 기록이 있어야 순위에 들어가요. 센서리는 커핑 편차, 로스팅·추출은 교육 매니저 점수예요."],
       ["색", "<b style=\"color:#00b386\">초록</b>은 좋아진 쪽이에요. 성장 리포트와 멤버 줄 아래 한 줄에서는 그대로이거나 나빠지면 회색, 역량 추이와 종합 성장에서는 나빠지면 <b style=\"color:#e5484d\">빨강</b>이에요. 센서리 편차는 줄어야 좋아진 거예요."]
     ];
@@ -9271,10 +9255,9 @@ window.hideCalibration = async function() {
           var r = await Promise.all([
             window.wcNoteBulk ? window.wcNoteBulk().catch(function () { return {}; }) : {},
             sensAll(),
-            sb().from("coach_notes").select("member_phone,eval_domain,score,created_at,resolved_at").then(function (x) { return x; }, function () { return { data: [] }; })
+            sb().from("coach_notes").select("member_phone,eval_domain,score,created_at").then(function (x) { return x; }, function () { return { data: [] }; })
           ]);
           var notes = r[2] && !r[2].error ? (r[2].data || []) : [];
-          if (r[2] && r[2].error) { var r3 = await sb().from("coach_notes").select("member_phone,eval_domain,score,created_at"); notes = r3.data || []; }   // SQL 30 전
           var by = {}, now = Date.now();
           function P(ph) { return by[ph] = by[ph] || { hit: [], sens: [], score: {}, at: [], res: 0 }; }
           Object.keys(r[0] || {}).forEach(function (ph) { var o = P(ph); o.hit = (r[0][ph].pts || []).map(function (q) { return { at: q.at, v: q.rate }; }); o.hit.forEach(function (q) { o.at.push(q.at); }); });
@@ -9282,8 +9265,9 @@ window.hideCalibration = async function() {
           notes.forEach(function (n) {
             var ph = digits(n.member_phone); if (!ph) return; var o = P(ph), t = ts(n.created_at); o.at.push(t);
             if (n.score != null && n.eval_domain) (o.score[n.eval_domain] = o.score[n.eval_domain] || []).push({ at: t, v: Number(n.score) });
-            if (n.resolved_at) o.res++;
+            (o.notes = o.notes || []).push(n);
           });
+          Object.keys(by).forEach(function (ph) { by[ph].res = scorePairs(by[ph].notes).length; });
           var map = {};
           Object.keys(by).forEach(function (ph) {
             var o = by[ph], all = o.at.filter(Boolean); if (!all.length) { map[ph] = { res: o.res }; return; }
@@ -9291,7 +9275,7 @@ window.hideCalibration = async function() {
             map[ph] = { t0: t0, t1: t1, span: t1 - t0, hit: cmp(o.hit, w), sens: cmp(o.sens, w), sc: bestScore(o.score, w), res: o.res };
           });
           GX.map = map;
-        } catch (e) { console.warn("[멤버별 성장] 레퍼런스 컵노트·해결된 코칭 불러오기 실패", e); GX.map = GX.map || {}; }
+        } catch (e) { console.warn("[멤버별 성장] 레퍼런스 컵노트·오른 점수 불러오기 실패", e); GX.map = GX.map || {}; }
         return GX.map;
       })();
       return GX.p;
@@ -9396,7 +9380,7 @@ window.hideCalibration = async function() {
     var jump = null;
     for (var i = 1; i < g.hit.length; i++) { var d = g.hit[i].v - g.hit[i - 1].v; if (!jump || d > jump.d) jump = { d: d, a: g.hit[i - 1].at, b: g.hit[i].at }; }
     var turn = null;
-    if (jump) g.notes.forEach(function (n) { var t = ts(n.created_at); if (t <= jump.b && t >= first && (n.eval_domain === "센서리" || ["session", "bean", "member"].indexOf(n.scope) >= 0)) { if (!turn || t > ts(turn.created_at)) turn = n; } });
+    if (jump) g.notes.forEach(function (n) { var t = ts(n.created_at); if (n.visible && t <= jump.b && t >= first && (n.eval_domain === "센서리" || ["session", "bean", "member"].indexOf(n.scope) >= 0)) { if (!turn || t > ts(turn.created_at)) turn = n; } });
     return { e: Math.round(k.e), r: Math.round(k.r), ce: ck.e, cr: ck.r, weeks: weeksTxt(first, last), cups: g.hit.length, coach: g.notes.length, turn: turn, firstAt: first, lastAt: last, grew: Math.round(k.r) - Math.round(k.e) >= GROW.hit };
   }
   /* 11-05: 성장 카드는 눈에 띄게 늘어난 지표로만 — 기준 미달이면 카드를 만들지 않음 */
@@ -9429,19 +9413,19 @@ window.hideCalibration = async function() {
       '<div class="cap">' + cap + '</div>' +
       '<div class="q">' + ed("qq", "", "멤버 한마디를 적어 주세요 (비워 두면 빠져요)") + '<small>' + esc(who()) + ' 님</small></div>' + foot() + '</div>';
   }
-  function roastData() {
-    var it = (GC.g.resolved || []).filter(function (x) { return x.roasts; })[0] || (GC.g.resolved || [])[0];
-    return it || null;
+  function roastData() {   // 로스팅 점수가 오른 묶음 (같은 생두를 다시 볶은 기록이 있는 것 먼저)
+    var l = (GC.g.rises || []).filter(function (x) { return x.dom === "로스팅"; });
+    return l.filter(function (x) { return x.roasts; })[0] || l[0] || null;
   }
   function trimQ(t, n) { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n) + "…" : t; }
   function cardRoast(it) {
-    var n = it.n, N = it.roasts || 0, dots = "";
+    var A = it.a, B = it.b, N = it.roasts || 0, dots = "";
     for (var i = 0; i < Math.max(2, N); i++) dots += (i ? "<b></b>" : "") + '<i class="' + (i === 0 ? "x" : (i === Math.max(2, N) - 1 ? "o" : "")) + '"></i>';
     return '<div class="pc dk" data-name="로스팅코칭">' +
-      '<div class="lg">' + logoImg(true) + '</div><div class="k">로스팅 코칭</div>' + ed("hd", (N ? "같은 생두 " + N + "번 로스팅,<br>" : "") + it.days + "일 만에 찾은 답") +
+      '<div class="lg">' + logoImg(true) + '</div><div class="k">로스팅 코칭</div>' + ed("hd", (N ? "같은 생두 " + N + "번 로스팅,<br>" : "") + it.days + "일 만에 " + esc(A.score) + "점에서 " + esc(B.score) + "점으로") +
       (N ? '<div class="pr"><div class="at">' + dots + '</div><div class="spl"><span>1차 · ' + mdw(ts(it.resList[0].res_date)) + '</span><span>' + N + '차 · ' + mdw(ts(it.resList[N - 1].res_date)) + '</span></div></div>' : '') +
       '<div class="cap" style="margin-top:auto">' + esc(it.bean ? trimQ(it.bean, 30) : "교육 매니저 코칭") + (it.cups ? ' · 커핑 ' + it.cups + '번' : '') + '</div>' +
-      '<div class="q">' + ed("qq", '"' + esc(trimQ(n.note, 40)) + '"' + (n.resolved_note ? ' → "' + esc(trimQ(n.resolved_note, 40)) + '"' : '')) + '<small>교육 매니저 코멘트 · ' + esc(who()) + ' 님</small></div>' + foot() + '</div>';
+      '<div class="q">' + ((A.visible && B.visible) ? ed("qq", '"' + esc(trimQ(A.note, 40)) + '" → "' + esc(trimQ(B.note, 40)) + '"') : ed("qq", "", "코멘트를 적어 주세요 (비공개 코멘트는 카드에 넣지 않아요)")) + '<small>교육 매니저 코멘트 · ' + esc(who()) + ' 님</small></div>' + foot() + '</div>';   /* 11-05: 멤버에게 공개한 코멘트만 카드에 */
   }
   function cardPeer(p) {
     return '<div class="pc" data-name="함께커핑">' +
@@ -9571,7 +9555,7 @@ window.hideCalibration = async function() {
       if (sb2) h += cardSensory(sb2);
       if (rd) h += cardRoast(rd);
       if (pd) h += cardPeer(pd);
-      if (!h) h = '<div class="gcem">카드로 만들 기록이 아직 없어요. 커핑 기록 2회 이상, 해결된 코칭, 동료와 함께 한 커핑 중 하나가 있어야 해요.</div>';
+      if (!h) h = '<div class="gcem">카드로 만들 기록이 아직 없어요. 늘어난 센서리 지표, 오른 로스팅 점수, 동료와 함께 한 커핑 중 하나가 있어야 해요.</div>';
     }
     body.innerHTML = h;
     var names = Array.prototype.map.call(body.querySelectorAll(".pc"), function (c) { return c.getAttribute("data-name"); });
@@ -9580,7 +9564,7 @@ window.hideCalibration = async function() {
     bgPanel();
     var hint = [];
     if (!sb2) hint.push("아직 눈에 띄게 늘어난 센서리 지표가 없어서 센서리 카드는 빠졌어요. (레퍼런스 컵노트 +" + GROW.hit + "%p · 센서리 정확도 +" + GROW.acc + " · 표현 범위 +" + GROW.voc + "가지 중 하나 이상)");
-    if (!rd) hint.push("로스팅 코칭 카드는 코멘트에 '해결됨'을 표시하면 생겨요.");
+    if (!rd) hint.push("로스팅 코칭 카드는 로스팅 점수를 남긴 코멘트가 앞보다 오르면 생겨요.");
     if (!pd) hint.push("함께 커핑 카드는 내가 볶은 원두를 다른 멤버가 평가한 커핑이 있으면 생겨요.");
     o.querySelector(".gcnote").innerHTML = "카드 속 제목과 따옴표 문장은 눌러서 고칠 수 있어요. 숫자와 날짜는 기록에서 가져와요." + (GC.fmt === "one" && hint.length ? "<br>" + esc(hint.join(" ")) : "");
   }
@@ -9613,7 +9597,7 @@ window.hideCalibration = async function() {
   window.wcGcOpen = async function (phone, name) {
     gcStyle();
     var d = digits(phone), g = _rep[d] || await gather(d);
-    if (!g.resolved) g.resolved = await resolvedItems(g).catch(function () { return []; });
+    if (!g.rises) g.rises = await riseItems(g).catch(function () { return []; });
     GC.g = g; GC.name = name || g.name || ""; GC.fmt = "one"; GC.mask = true; GC.peer = null; GC.bg = {}; GC.sel = null;
     var o = _$("wcGcOly"); if (o) o.remove();
     o = document.createElement("div"); o.id = "wcGcOly";
