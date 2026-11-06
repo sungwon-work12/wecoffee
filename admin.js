@@ -8929,6 +8929,8 @@ window.hideCalibration = async function() {
   };
   /* 11-06: 알림 → 성장 현황 '커핑 기록'에서 그 세션(멤버 세션 포함)의 참가자 평가 결과 열기 */
   window.wcCupSessGo = async function (sid) {
+    var pm = _$("page-members");   /* 성장 현황은 '멤버 관리' 탭 안에 있음 → 그 탭으로 먼저 */
+    if (pm && !pm.classList.contains("active") && typeof window.switchMainTab === "function") window.switchMainTab("page-members");
     if (typeof window.wcCupRecOpen === "function") window.wcCupRecOpen();
     var n = 0; while (!_$("wcGrowthPage") && n++ < 40) await new Promise(function (r) { setTimeout(r, 250); });
     if (!_$("wcGrowthPage")) return;
