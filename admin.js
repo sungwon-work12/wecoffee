@@ -9902,3 +9902,119 @@ window.hideCalibration = async function() {
   window.addEventListener("resize", function () { var b = document.getElementById("wcCupTabs"); if (b) hint(b); });
 })();
 /* ═══ 커핑 평가 상세 원두 목록 한 줄 끝 ═══ */
+
+/* ═══ 11-06: 커핑 평가 상세(관리자 멤버 상세) — 함께 커핑한 사람과 비교를 멤버 커핑 결과 창과 같은 방식으로 ═══
+   · 원래: 내 평가 아래에 '다른 참가자 N명' 카드가 줄줄이 → 비교하려면 스크롤을 내렸다 올렸다
+   · 바꿈: 레이더 바로 아래 '비교 대상'(참가자 평균 · 참가자별) → 고르면 레이더·항목별 강도·컵노트가 '이 멤버 vs 상대'로 같은 자리에
+           참가자 카드 목록은 숨김(비교 데이터로만 씀) · 아무도 안 고르면 기존 화면 그대로 */
+(function () {
+  "use strict";
+  if (window.__wcCupCmp1) return; window.__wcCupCmp1 = 1;
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  var st = document.createElement("style"); st.id = "wcCupCmpStyle";
+  st.textContent =
+    ".wc-cmp-hd{font-size:13px;font-weight:700;color:#191f28;margin:14px 0 8px;}.wc-cmp-hd span{font-weight:500;color:#8b95a1;font-size:12px;}" +
+    ".wc-cmp-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}" +
+    ".wc-cmp-chip{border:1px solid #e5e8eb;background:#fff;border-radius:10px;padding:7px 12px;font:inherit;font-size:12.5px;font-weight:600;color:#4e5968;cursor:pointer;}" +
+    ".wc-cmp-chip.on{background:#191f28;border-color:#191f28;color:#fff;}.wc-cmp-chip .c{margin-left:6px;font-weight:700;color:#ea6f00;}.wc-cmp-chip.on .c{color:#ffb877;}" +
+    ".wc-cmp-box{margin-top:12px;border:1px solid #f0f1f3;border-radius:16px;padding:6px 14px 14px;background:#fff;}" +
+    ".wc-cmp-lg{display:flex;gap:14px;font-size:11.5px;color:#8b95a1;margin:10px 0 2px;}.wc-cmp-lg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px;}" +
+    ".wc-cmp-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #f4f5f7;}.wc-cmp-row:first-of-type{border-top:0;}" +
+    ".wc-cmp-row .lb{width:60px;flex-shrink:0;font-size:12.5px;color:#8b95a1;}.wc-cmp-row .tr{position:relative;flex:1;height:18px;}" +
+    ".wc-cmp-row .ln{position:absolute;left:0;right:0;top:50%;height:4px;transform:translateY(-50%);background:#e8eaed;border-radius:99px;}" +
+    ".wc-cmp-row .cn{position:absolute;top:50%;height:4px;transform:translateY(-50%);background:#c9cdd3;border-radius:99px;}" +
+    ".wc-cmp-row .dt{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid #fff;}" +
+    ".wc-cmp-row .vs{width:82px;flex-shrink:0;text-align:right;font-size:12.5px;font-weight:700;}" +
+    ".wc-cmp-ng{margin-top:12px;}.wc-cmp-ng .k{font-size:11.5px;font-weight:700;color:#8b95a1;margin-bottom:6px;}.wc-cmp-ng .cs{display:flex;flex-wrap:wrap;gap:6px;}" +
+    ".wc-cmp-ng .cs span{font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;}" +
+    ".wc-cmp-hide{display:none!important;}";
+  (document.head || document.documentElement).appendChild(st);
+
+  var S = { sel: null };
+  function memberName() { var u = window.uDat || {}; return u.name ? u.name + "님" : "이 멤버"; }
+  function others(view) {
+    return Array.prototype.map.call(view.querySelectorAll(".wc-ch-pcard[data-vals]"), function (c) {
+      var vals = (c.getAttribute("data-vals") || "").split(",").map(function (x) { return x === "" ? null : Number(x); });
+      var notes = []; c.querySelectorAll(".wc-ch-chip").forEach(function (x) { var t = (x.textContent || "").trim(); if (t && notes.indexOf(t) < 0) notes.push(t); });
+      var m = (c.textContent || "").match(/CVA\s*([\d.]+)/);
+      return { name: c.getAttribute("data-nm") || "참가자", vals: vals, notes: notes, cva: m ? m[1] : null };
+    });
+  }
+  function avgOf(list) {
+    if (!list.length) return null;
+    var n = list[0].vals.length, vals = [], notes = [];
+    for (var i = 0; i < n; i++) { var s = 0, k = 0; list.forEach(function (o) { if (o.vals[i] != null) { s += o.vals[i]; k++; } }); vals.push(k ? Math.round(s / k * 10) / 10 : null); }
+    list.forEach(function (o) { o.notes.forEach(function (t) { if (notes.indexOf(t) < 0) notes.push(t); }); });
+    return { name: "참가자 평균", vals: vals, notes: notes, avg: true };
+  }
+  function f1(v) { return v == null ? "—" : Number(v).toFixed(1); }
+  function redrawRadar(view, tgt) {
+    var rd = view.querySelector(".wc-ch-radar"), svg = rd && rd.querySelector("svg");
+    if (!svg || typeof window._wcChRadarFn !== "function") return;
+    try { svg.outerHTML = window._wcChRadarFn(window._wcChMe, tgt ? null : window._wcChRef, tgt ? tgt.vals : window._wcChAvg, window._wcChAx); } catch (e) { return; }
+    var lg = rd.querySelector(".wc-ch-legend"); if (!lg) return;
+    if (!lg.__orig) lg.__orig = lg.innerHTML;
+    lg.innerHTML = tgt ? '<span><i style="background:#ff7900"></i>' + esc(memberName()) + '</span><span><i style="background:#12b886"></i>' + esc(tgt.name) + "</span>" : lg.__orig;
+  }
+  function cmpHTML(tgt) {
+    var me = window._wcChMe || [], ax = window._wcChAx || [], h = "";
+    h += '<div class="wc-cmp-lg"><span><i style="background:#ff7900"></i>' + esc(memberName()) + '</span><span><i style="background:#12b886"></i>' + esc(tgt.name) + "</span></div>";
+    ax.forEach(function (lb, i) {
+      var a = me[i], b = tgt.vals[i], pa = a == null ? null : Math.max(0, Math.min(15, a)) / 15 * 100, pb = b == null ? null : Math.max(0, Math.min(15, b)) / 15 * 100;
+      h += '<div class="wc-cmp-row"><span class="lb">' + esc(lb) + '</span><div class="tr"><div class="ln"></div>' +
+        (pa != null && pb != null ? '<div class="cn" style="left:' + Math.min(pa, pb) + "%;width:" + Math.abs(pa - pb) + '%"></div>' : "") +
+        (pb != null ? '<div class="dt" style="left:' + pb + '%;background:#12b886;"></div>' : "") +
+        (pa != null ? '<div class="dt" style="left:' + pa + '%;background:#ff7900;"></div>' : "") +
+        '</div><span class="vs"><span style="color:#ff7900;">' + f1(a) + '</span><span style="color:#c4cad2;font-weight:400;margin:0 4px;">/</span><span style="color:#12b886;">' + f1(b) + "</span></span></div>";
+    });
+    var mine = (window._wcChMyNotes || []).slice(), ms = {}, ts = {};
+    mine.forEach(function (x) { ms[x] = 1; }); tgt.notes.forEach(function (x) { ts[x] = 1; });
+    var both = mine.filter(function (x) { return ts[x]; }), om = mine.filter(function (x) { return !ts[x]; }), ot = tgt.notes.filter(function (x) { return !ms[x]; });
+    function grp(k, arr, bg, c) { return arr.length ? '<div class="wc-cmp-ng"><div class="k">' + k + '</div><div class="cs">' + arr.map(function (x) { return '<span style="background:' + bg + ";color:" + c + ';">' + esc(x) + "</span>"; }).join("") + "</div></div>" : ""; }
+    var ng = grp("함께 적은 컵노트", both, "#e6f7f0", "#0a8f68") + grp(memberName() + "만 적은 컵노트", om, "#fff2e6", "#c85f00") + grp(tgt.name + (tgt.avg ? "에만 있는 컵노트" : "만 적은 컵노트"), ot, "#f2f4f6", "#4e5968");
+    if (ng) h += '<div style="border-top:1px solid #f0f1f3;margin-top:6px;">' + ng + "</div>";
+    return h;
+  }
+  function enhance() {
+    var view = document.getElementById("wcCupView"); if (!view) return;
+    var rd = view.querySelector(".wc-ch-radar"), list = others(view);
+    if (!rd || !list.length || view.querySelector(".wc-cmp-chips")) return;
+    // 참가자 카드 목록·안내 줄 숨김 (비교 데이터로만 사용)
+    view.querySelectorAll(".wc-ch-pcard").forEach(function (c) { c.classList.add("wc-cmp-hide"); });
+    Array.prototype.forEach.call(view.querySelectorAll("div"), function (d) {
+      var t = (d.textContent || "").trim();
+      if (!d.children.length && (/^다른 참가자 \d+명$/.test(t) || t === "레이더의 초록 점선이 참가자 평균이에요.")) d.classList.add("wc-cmp-hide");
+    });
+    var opts = []; if (list.length > 1) opts.push(avgOf(list)); opts = opts.concat(list);
+    var wrap = document.createElement("div");
+    wrap.innerHTML = '<div class="wc-cmp-hd">비교 대상 <span>· 함께 커핑한 사람과 비교해 보기</span></div><div class="wc-cmp-chips">' +
+      opts.map(function (o, i) { return '<button type="button" class="wc-cmp-chip" data-i="' + i + '">' + esc(o.name) + (o.cva ? '<span class="c">' + esc(o.cva) + "</span>" : "") + "</button>"; }).join("") +
+      '</div><div class="wc-cmp-box" style="display:none;"></div>';
+    rd.parentNode.insertBefore(wrap, rd.nextSibling);
+    var box = wrap.querySelector(".wc-cmp-box");
+    function pick(i) {
+      var same = S.sel === i; S.sel = same ? null : i;
+      wrap.querySelectorAll(".wc-cmp-chip").forEach(function (b) { b.classList.toggle("on", !same && +b.getAttribute("data-i") === i); });
+      var tgt = S.sel == null ? null : opts[S.sel];
+      redrawRadar(view, tgt);
+      if (tgt) { box.innerHTML = cmpHTML(tgt); box.style.display = ""; } else { box.innerHTML = ""; box.style.display = "none"; }
+    }
+    wrap.addEventListener("click", function (e) { var b = e.target.closest(".wc-cmp-chip"); if (b) { e.stopPropagation(); pick(+b.getAttribute("data-i")); } });
+    S.sel = null;
+  }
+  function attach() {
+    var v = document.getElementById("wcCupView"); if (!v || v.__wcCmp) return;
+    v.__wcCmp = 1;
+    if (window.MutationObserver) new MutationObserver(function () { setTimeout(enhance, 0); }).observe(v, { childList: true });
+    enhance();
+  }
+  (function arm(t) {
+    var o = window.wcOpenCupHistory;
+    if (typeof o !== "function") { if (t > 0) setTimeout(function () { arm(t - 1); }, 500); return; }
+    if (o.__wcCmp1) return;
+    var w = async function () { var r = await o.apply(this, arguments); try { attach(); } catch (e) {} return r; };
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) w[k] = o[k];
+    w.__wcCmp1 = 1; window.wcOpenCupHistory = w;
+  })(120);
+})();
+/* ═══ 커핑 평가 상세 비교 방식 끝 ═══ */
