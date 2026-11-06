@@ -7988,6 +7988,19 @@ window.hideCalibration = async function() {
       setTimeout(function () { el.style.borderColor = bc; el.style.boxShadow = bs; }, 2600);
     }, 250);
   }
+  /* 11-06: 멤버 상세가 다 그려지면 '커핑 세션 이력'의 그 세션 카드로 이동 · 상세 열기
+     호스트가 평가하지 않은 세션은 카드가 없음 → 안내만 */
+  function focusCup(sid) {
+    var sel = '.memCupCard[data-cup-sid="' + String(sid).replace(/"/g, "") + '"]', t0 = Date.now();
+    var t = setInterval(function () {
+      var el = document.querySelector(sel), busy = !!document.getElementById("wcHistSpin");
+      if (el && !busy) { clearInterval(t); if (typeof window.memRoastGoCup === "function") window.memRoastGoCup(String(sid)); return; }
+      if ((!busy && Date.now() - t0 > 2500) || Date.now() - t0 > 15000) {
+        clearInterval(t);
+        if (!document.querySelector(sel) && typeof showToast === "function") showToast("세션을 연 멤버가 평가하지 않아 평가 카드가 없어요.");
+      }
+    }, 250);
+  }
   async function focusNote(noteId) {
     var sb = SBC(); if (!sb) return;
     try {
@@ -8070,12 +8083,11 @@ window.hideCalibration = async function() {
         var a = ST.items[+it.getAttribute("data-i")]; if (!a) return;
         readOne(a);
         close();
-        /* 11-06: 멤버 커핑 세션 알림 → 성장 현황 '커핑 기록'에서 그 세션의 참가자 평가 결과를 바로 엶 (호스트가 평가하지 않은 세션도) */
-        if (/^mcup_/.test(String(a.kind || "")) && a.ref_id && typeof window.wcCupSessGo === "function") { window.wcCupSessGo(String(a.ref_id)); return; }
         if (a.member_phone && typeof window.openHistoryModal === "function") {
           window.openHistoryModal(a.member_phone, a.member_name || "멤버");
           if (a.kind === "roast_plan" && a.ref_id) focusRes(String(a.ref_id));   // 10-31: 로스팅 기록 알림 → 그 예약 줄로 이동·잠깐 강조
           if ((a.kind === "note_add" || a.kind === "note_ack") && a.ref_id) focusNote(String(a.ref_id));   // 11-05: 코멘트 알림 → 그 코멘트로
+          if (/^mcup_/.test(String(a.kind || "")) && a.ref_id) focusCup(String(a.ref_id));   // 11-06: 멤버 커핑 세션 알림 → 멤버 상세 '커핑 세션 이력'의 그 세션 카드로 이동 · 상세 열기
         }
       });
       document.body.appendChild(p);
