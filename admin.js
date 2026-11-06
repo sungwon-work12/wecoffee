@@ -9859,3 +9859,46 @@ window.hideCalibration = async function() {
   window.addEventListener("resize", function () { if (cur) close(); });
 })();
 /* ═══ 예약 현황 약식 카드 끝 ═══ */
+
+/* ═══ 11-06: 커핑 평가 상세(멤버 상세 · 커핑 내역) 원두 목록 한 줄 ═══
+   · 원두가 많으면 목록이 한 줄에 하나씩 세로로 쌓여 레이더·평가 내용이 한참 아래로 밀리던 것
+   · 커핑 페이지 결과 창과 같게: 한 줄로 두고 옆으로 넘김 · 넘칠 때만 "원두 N종 · 옆으로 넘기기" · 고른 원두는 가운데 쪽으로 */
+(function () {
+  "use strict";
+  if (window.__wcCupTabs1) return; window.__wcCupTabs1 = 1;
+  var st = document.createElement("style"); st.id = "wcCupTabsOneLine";
+  st.textContent =
+    "#wcCupHistOly #wcCupTabs,#wcCupTabs{flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:none;}" +
+    "#wcCupTabs::-webkit-scrollbar{display:none;}" +
+    "#wcCupHistOly #wcCupTabs .wc-ch-tab,#wcCupTabs .wc-ch-tab{flex:0 0 auto!important;width:auto!important;white-space:nowrap!important;max-width:240px;overflow:hidden;text-overflow:ellipsis;}" +
+    ".wc-cuptabhint{display:none;font-size:12px;font-weight:500;color:#8b95a1;margin:0 0 8px 2px;letter-spacing:-0.2px;}.wc-cuptabhint.on{display:block;}";
+  (document.head || document.documentElement).appendChild(st);
+  function center(box) {
+    if (box.scrollWidth <= box.clientWidth) return;
+    var on = box.querySelector(".wc-ch-tab.on"); if (!on) return;
+    var x = on.offsetLeft - box.offsetLeft - (box.clientWidth - on.offsetWidth) / 2;
+    try { box.scrollTo({ left: Math.max(0, x), behavior: "smooth" }); } catch (e) { box.scrollLeft = Math.max(0, x); }
+  }
+  function hint(box) {
+    var h = box.__wcHint; if (!h) return;
+    var n = box.querySelectorAll(".wc-ch-tab").length, over = n > 1 && box.scrollWidth > box.clientWidth + 2;
+    h.textContent = "원두 " + n + "종 · 옆으로 넘기기"; h.classList.toggle("on", over);
+  }
+  function setup() {
+    var box = document.getElementById("wcCupTabs"); if (!box || box.__wc1) return;
+    box.__wc1 = 1;
+    var h = document.createElement("div"); h.className = "wc-cuptabhint"; box.parentNode.insertBefore(h, box); box.__wcHint = h;
+    if (window.MutationObserver) new MutationObserver(function () { setTimeout(function () { hint(box); center(box); }, 30); }).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    setTimeout(function () { hint(box); center(box); }, 60);
+  }
+  (function arm(t) {
+    var o = window.wcOpenCupHistory;
+    if (typeof o !== "function") { if (t > 0) setTimeout(function () { arm(t - 1); }, 500); return; }
+    if (o.__wcTabs1) return;
+    var w = async function () { var r = await o.apply(this, arguments); try { setup(); } catch (e) {} return r; };
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) w[k] = o[k];
+    w.__wcTabs1 = 1; window.wcOpenCupHistory = w;
+  })(120);
+  window.addEventListener("resize", function () { var b = document.getElementById("wcCupTabs"); if (b) hint(b); });
+})();
+/* ═══ 커핑 평가 상세 원두 목록 한 줄 끝 ═══ */
