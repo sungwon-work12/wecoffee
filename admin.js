@@ -7988,16 +7988,6 @@ window.hideCalibration = async function() {
       setTimeout(function () { el.style.borderColor = bc; el.style.boxShadow = bs; }, 2600);
     }, 250);
   }
-  /* 11-06: 멤버 상세의 '커핑 세션 이력' 카드가 그려지면 그 세션으로 이동 · 상세 열기 (평가 기록이 없는 예정 세션은 카드가 없어 멤버 상세만 열림) */
-  function focusCup(sid) {
-    var sel = '.memCupCard[data-cup-sid="' + String(sid).replace(/"/g, "") + '"]';
-    var stale = document.querySelector(sel), n = 0, t = setInterval(function () {
-      var el = document.querySelector(sel);
-      if (!el || (el === stale && n < 16)) { if (++n > 40) clearInterval(t); return; }
-      clearInterval(t);
-      if (typeof window.memRoastGoCup === "function") window.memRoastGoCup(String(sid));
-    }, 250);
-  }
   async function focusNote(noteId) {
     var sb = SBC(); if (!sb) return;
     try {
@@ -8080,11 +8070,12 @@ window.hideCalibration = async function() {
         var a = ST.items[+it.getAttribute("data-i")]; if (!a) return;
         readOne(a);
         close();
+        /* 11-06: 멤버 커핑 세션 알림 → 성장 현황 '커핑 기록'에서 그 세션의 참가자 평가 결과를 바로 엶 (호스트가 평가하지 않은 세션도) */
+        if (/^mcup_/.test(String(a.kind || "")) && a.ref_id && typeof window.wcCupSessGo === "function") { window.wcCupSessGo(String(a.ref_id)); return; }
         if (a.member_phone && typeof window.openHistoryModal === "function") {
           window.openHistoryModal(a.member_phone, a.member_name || "멤버");
           if (a.kind === "roast_plan" && a.ref_id) focusRes(String(a.ref_id));   // 10-31: 로스팅 기록 알림 → 그 예약 줄로 이동·잠깐 강조
           if ((a.kind === "note_add" || a.kind === "note_ack") && a.ref_id) focusNote(String(a.ref_id));   // 11-05: 코멘트 알림 → 그 코멘트로
-          if (/^mcup_/.test(String(a.kind || "")) && a.ref_id) focusCup(String(a.ref_id));   // 11-06: 멤버 커핑 세션 알림 → 그 세션 카드로 이동 · 상세 열기
         }
       });
       document.body.appendChild(p);
@@ -8701,6 +8692,7 @@ window.hideCalibration = async function() {
       });
       // 센서리 훈련 커핑만 (멤버가 연 세션 제외) · 최신 날짜가 위
       CR.sess = r[0].filter(function (s) { return s.created_via !== "member" && cnt[s.id] && cnt[s.id].n; });
+      CR.all = {}; r[0].forEach(function (s) { CR.all[s.id] = s; });   /* 11-06: 목록엔 없는 멤버 세션도 알림에서 바로 열 수 있게 */
       CR.sess.sort(function (a, b) { return (new Date(b.scheduled_at || 0).getTime() || 0) - (new Date(a.scheduled_at || 0).getTime() || 0); });
       CR.beans = beans; CR.cnt = cnt; CR.loaded = true;
     } catch (e) {
@@ -8741,7 +8733,7 @@ window.hideCalibration = async function() {
     _$("crListView").style.display = "";
   }
   async function crOpen(sid, bid) {
-    var s = CR.sess.filter(function (x) { return String(x.id) === String(sid); })[0]; if (!s) return;
+    var s = CR.sess.filter(function (x) { return String(x.id) === String(sid); })[0] || (CR.all && CR.all[sid]); if (!s) return;
     var beans = CR.beans[s.id] || [], bc = (CR.cnt[s.id] || {}).bean || {};
     if (!bid) { var fb = beans.filter(function (b) { return Object.keys(bc[b.id] || {}).length; })[0] || beans[0]; bid = fb ? fb.id : null; }
     CR.mode = "det"; CR.selS = s.id; CR.selB = bid;
@@ -8749,7 +8741,7 @@ window.hideCalibration = async function() {
     var D = _$("crDetView"); D.style.display = "";
     var c = CR.cnt[s.id] || { people: {} };
     D.innerHTML = '<div class="crdh"><button type="button" class="crback" data-crback="1">← 목록</button>' +
-      '<span class="crdt">' + esc(s.title || "센서리 훈련 커핑") + '</span><span class="crdm">' + [dateTxt(s.scheduled_at), centerTxt(s.center), "참가 " + Object.keys(c.people).length + "명"].filter(Boolean).join(" · ") + '</span>' +
+      '<span class="crdt">' + esc(s.title || (s.created_via === "member" ? "멤버 커핑 세션" : "센서리 훈련 커핑")) + '</span><span class="crdm">' + [dateTxt(s.scheduled_at), centerTxt(s.center), "참가 " + Object.keys(c.people).length + "명"].filter(Boolean).join(" · ") + '</span>' +
       '<button type="button" class="crexp" data-crexp="1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg>평가 카드로 보기</button></div>' +
       '<div class="crpanel"><div class="crbeans">' + beans.map(function (b, i) { var n = Object.keys(bc[b.id] || {}).length; return '<button type="button" class="crbean' + (String(b.id) === String(bid) ? ' on' : '') + '" data-crbean="' + esc(b.id) + '">' + (i + 1) + ". " + esc(b.name) + '<span>' + n + '명</span></button>'; }).join("") + '</div>' +
       '<div id="crBeanInfo"></div><div id="crRv"><div class="crem">불러오는 중…</div></div></div>';
@@ -8772,7 +8764,7 @@ window.hideCalibration = async function() {
     box.innerHTML = '<div class="crem">불러오는 중…</div>';
     var my = ++CR.seq;
     try {
-      var s = CR.sess.filter(function (x) { return String(x.id) === String(sid); })[0] || {};
+      var s = CR.sess.filter(function (x) { return String(x.id) === String(sid); })[0] || (CR.all && CR.all[sid]) || {};
       var res = await Promise.all([
         supabaseClient.from("cupping_records").select("*").eq("session_id", sid).eq("bean_id", bid),
         supabaseClient.from("cupping_references").select("*").eq("bean_id", bid).maybeSingle(),
@@ -8934,6 +8926,17 @@ window.hideCalibration = async function() {
       if (!document.body.contains(el)) return;
       el.innerHTML = (c.recs.length && !(opt && opt.noNotes) ? notesHTML(c) : "") + (opt && opt.sessions ? sessListHTML(v) : "");
     } catch (e) { console.warn("[향미 노트] 불러오기 실패", e); if (document.body.contains(el)) el.innerHTML = ""; }
+  };
+  /* 11-06: 알림 → 성장 현황 '커핑 기록'에서 그 세션(멤버 세션 포함)의 참가자 평가 결과 열기 */
+  window.wcCupSessGo = async function (sid) {
+    if (typeof window.wcCupRecOpen === "function") window.wcCupRecOpen();
+    var n = 0; while (!_$("wcGrowthPage") && n++ < 40) await new Promise(function (r) { setTimeout(r, 250); });
+    if (!_$("wcGrowthPage")) return;
+    crTab("c");
+    n = 0; while ((CR.busy || !CR.loaded) && n++ < 60) await new Promise(function (r) { setTimeout(r, 250); });
+    if (!(CR.all && CR.all[sid])) { await crLoad(true); }
+    crTab("c");
+    await crOpen(sid, null);
   };
   // 커핑 기록 탭으로 가서 그 회차·원두를 열고, 그 멤버 상세를 펼쳐 잠깐 강조
   window.wcCupRecGo = async function (sid, bid, pid) {
