@@ -5643,10 +5643,11 @@ window.hideCalibration = async function() {
           var s = sessMap[p.session_id] || {};
           var scores = recs.map(function (r) { return num(r.cva_score); }).filter(function (v) { return v != null; });
           var avgScore = scores.length ? scores.reduce(function (a, b) { return a + b; }, 0) / scores.length : null;
+          var done = recs.some(function (r) { return window.wcRecDone ? window.wcRecDone(r) : !!r.submitted_at; });   /* 11-06: 점수 없는 서술형 평가도 '평가 완료'로 */
           var devs = [];
           recs.forEach(function (r) { var ref = refMap[r.bean_id]; if (!ref) return; RV_KEYS.forEach(function (k) { var mv = num(r[k]), rv = num(ref[k]); if (mv != null && rv != null) devs.push(Math.abs(mv - rv)); }); });
           var acc = devs.length ? devs.reduce(function (a, b) { return a + b; }, 0) / devs.length : null;
-          sessions.push({ sessionId: p.session_id, title: s.title || "커핑 세션", date: s.scheduled_at, score: avgScore, acc: acc,
+          sessions.push({ sessionId: p.session_id, title: s.title || "커핑 세션", date: s.scheduled_at, score: avgScore, acc: acc, done: done,
             via: s.created_via, host: (String(s.host_batch || "").replace(/[\[\]]/g, "").trim() + " " + (s.host_name || "")).trim() });   // 10-28: 멤버가 연 세션 표시
         });
         sessions.sort(function (a, b) { return (a.date ? new Date(a.date) : 0) - (b.date ? new Date(b.date) : 0); });
@@ -5775,7 +5776,7 @@ window.hideCalibration = async function() {
             '<div style="min-width:0;"><div style="display:flex;align-items:center;gap:6px;min-width:0;"><span style="font-size:14px;font-weight:700;color:#191f28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(s.title) + '</span>' +
               (isMem ? '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#ea6f00;border:1px solid #ffd7b5;border-radius:7px;padding:2px 7px;">멤버 세션</span>' : '') + rTag + '</div>' +
             '<div style="font-size:12px;color:#8b95a1;margin-top:2px;">' + esc(dstr(s.date)) + ' · ' + accBadge + '</div></div>' +
-            '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0;"><div style="font-size:16px;font-weight:800;color:#ea6f00;">' + fx(s.score) + '<span style="font-size:10px;color:#8b95a1;font-weight:700;"> 점</span></div>' +
+            '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">' + (s.score == null && s.done ? '<div style="font-size:12px;font-weight:700;color:#ea6f00;">평가 완료</div>' : '<div style="font-size:16px;font-weight:800;color:#ea6f00;">' + fx(s.score) + '<span style="font-size:10px;color:#8b95a1;font-weight:700;"> 점</span></div>') +
             '<button type="button" class="btn-outline btn-sm" style="height:30px;padding:0 10px;" onclick="window.memCupReview(\'' + sidj + '\',\'' + pj + '\',\'' + nj + '\',this)">상세</button></div>' +
           '</div>' +
           '<div class="memCupEval" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#f2f4f6);"></div>' +
@@ -6367,6 +6368,8 @@ window.hideCalibration = async function() {
   /* ── 10-31: 로스팅 기록 ──
      · 행 = 로스팅존 예약에 적은 '로스팅한 생두' 하나
      · 커핑 연결은 커핑 원두의 roast_reservation_id(멤버가 '내 로스팅에서 고르기'로 고른 것)로만 · 같은 예약 안에서 이름으로 줄 맞춤 */
+  /* 11-06: 평가를 저장(제출)했는지 — 점수(CVA)가 없는 서술형 평가도 제출했으면 '평가 완료' · 제출 전 임시 저장은 제외 */
+  window.wcRecDone = window.wcRecDone || function (r) { return !!(r && r.form_type !== "basic" && r.submitted_at); };
   function rkNorm(t) { return String(t == null ? "" : t).replace(/\s+/g, " ").trim().toLowerCase(); }
   function rkMD(v) {
     if (!v) return "";
@@ -6404,7 +6407,8 @@ window.hideCalibration = async function() {
           var ss = csMap[cb.session_id] || {}, t = ss.scheduled_at ? new Date(ss.scheduled_at).getTime() : 0;
           if (!cup || t > cup.t) {
             var rec = (recs || []).filter(function (x) { return String(x.bean_id) === String(cb.id) && x.cva_score != null && x.cva_score !== "" && !isNaN(Number(x.cva_score)); })[0];
-            cup = { sid: String(cb.session_id || ""), t: t, date: ss.scheduled_at || "", cva: rec ? Number(rec.cva_score) : null };
+            var mine = (recs || []).filter(function (x) { return String(x.bean_id) === String(cb.id); });
+            cup = { sid: String(cb.session_id || ""), t: t, date: ss.scheduled_at || "", cva: rec ? Number(rec.cva_score) : null, done: mine.some(function (x) { return window.wcRecDone ? window.wcRecDone(x) : !!x.submitted_at; }) };   /* 11-06: 점수 없이 평가만 저장해도 '평가 완료' */
           }
         });
         rows.push({ resId: r.id, name: it.name, vendor: it.vendor, sub: "로스팅 " + rkMD(String(r.res_date || "").split("T")[0]) + (r.res_time ? " " + String(r.res_time).trim() : "") + (rkPlace(r) ? " · " + rkPlace(r) : ""), cup: cup });
@@ -6418,9 +6422,9 @@ window.hideCalibration = async function() {
     var c = row.cup, gray = 'flex-shrink:0;font-size:12px;color:#b0b8c1;font-weight:600;';
     /* 10-31: 상태 표기 — 미진행 / 예정 / 평가 미입력 / 점수(주황 버튼) */
     if (!c) right = '<span style="' + gray + '">커핑 세션 미진행</span>';
-    else if (row.cupCard && c.cva != null) {
+    else if (row.cupCard && (c.cva != null || c.done)) {
       right = '<button type="button" onclick="window.memRoastGoCup(\'' + rkAttr(c.sid) + '\')" style="flex-shrink:0;display:inline-flex;align-items:center;gap:6px;border:1px solid #ffd7b5;border-radius:8px;background:#fff;padding:5px 9px;font:inherit;font-size:12px;font-weight:700;color:#ea6f00;cursor:pointer;">' +
-        '커핑 ' + esc(rkMD(c.date)) + ' · CVA <b style="font-size:14px;font-weight:800;">' + c.cva.toFixed(1) + '</b>' +
+        '커핑 ' + esc(rkMD(c.date)) + (c.cva != null ? ' · CVA <b style="font-size:14px;font-weight:800;">' + c.cva.toFixed(1) + '</b>' : ' · 평가 완료') +
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>';
     }
     else if (c.t && c.t > Date.now()) right = '<span style="' + gray + '">커핑 세션 예정 · ' + esc(rkMD(c.date)) + '</span>';
@@ -7984,6 +7988,16 @@ window.hideCalibration = async function() {
       setTimeout(function () { el.style.borderColor = bc; el.style.boxShadow = bs; }, 2600);
     }, 250);
   }
+  /* 11-06: 멤버 상세의 '커핑 세션 이력' 카드가 그려지면 그 세션으로 이동 · 상세 열기 (평가 기록이 없는 예정 세션은 카드가 없어 멤버 상세만 열림) */
+  function focusCup(sid) {
+    var sel = '.memCupCard[data-cup-sid="' + String(sid).replace(/"/g, "") + '"]';
+    var stale = document.querySelector(sel), n = 0, t = setInterval(function () {
+      var el = document.querySelector(sel);
+      if (!el || (el === stale && n < 16)) { if (++n > 40) clearInterval(t); return; }
+      clearInterval(t);
+      if (typeof window.memRoastGoCup === "function") window.memRoastGoCup(String(sid));
+    }, 250);
+  }
   async function focusNote(noteId) {
     var sb = SBC(); if (!sb) return;
     try {
@@ -8070,6 +8084,7 @@ window.hideCalibration = async function() {
           window.openHistoryModal(a.member_phone, a.member_name || "멤버");
           if (a.kind === "roast_plan" && a.ref_id) focusRes(String(a.ref_id));   // 10-31: 로스팅 기록 알림 → 그 예약 줄로 이동·잠깐 강조
           if ((a.kind === "note_add" || a.kind === "note_ack") && a.ref_id) focusNote(String(a.ref_id));   // 11-05: 코멘트 알림 → 그 코멘트로
+          if (/^mcup_/.test(String(a.kind || "")) && a.ref_id) focusCup(String(a.ref_id));   // 11-06: 멤버 커핑 세션 알림 → 그 세션 카드로 이동 · 상세 열기
         }
       });
       document.body.appendChild(p);
@@ -8944,9 +8959,10 @@ window.hideCalibration = async function() {
       fetchAll("cupping_participants", "id,session_id,member_id,guest_phone"),
       fetchAll("cupping_records", "participant_id,session_id,bean_id,form_type,notes_fragrance,notes_aroma,notes_tasting,notes_custom"),
       fetchAll("cupping_sessions", "id,scheduled_at,created_via"),
-      fetchAll("cupping_references", "bean_id,ref_notes")
+      fetchAll("cupping_references", "bean_id,ref_notes"),
+      fetchAll("members", "id,phone")   /* 11-06: 멤버 탭을 안 열어 globalMembers가 비어 있어도 회원 커핑 기록이 빠지지 않게 직접 불러옴 */
     ]);
-    var memPh = {}; (window.globalMembers || []).forEach(function (m) { if (m.id != null) memPh[m.id] = digits(m.phone); });
+    var memPh = {}; r[4].concat(window.globalMembers || []).forEach(function (m) { if (m && m.id != null && !memPh[m.id]) memPh[m.id] = digits(m.phone); });
     var pidPh = {}; r[0].forEach(function (p) { var ph = p.member_id ? memPh[p.member_id] : digits(p.guest_phone); if (ph) pidPh[p.id] = ph; });
     var sess = {}; r[2].forEach(function (s) { sess[s.id] = s; });
     var refs = {}; r[3].forEach(function (x) { refs[x.bean_id] = x; });
