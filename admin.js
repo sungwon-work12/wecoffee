@@ -6448,8 +6448,16 @@ window.hideCalibration = async function() {
     document.querySelectorAll(".memCupCard[data-cup-sid]").forEach(function (el) { if (!card && el.getAttribute("data-cup-sid") === String(sid)) card = el; });
     if (!card) return;
     var ev = card.querySelector(".memCupEval"), btn = card.querySelector("button.btn-outline");
-    if (ev && ev.getAttribute("data-open") !== "1" && btn) btn.click();
-    rkScroll(card); rkFlash([card]);
+    /* 11-06: 상세를 여는 동안 부드러운 스크롤이 중간에 끊겨 엉뚱한 곳에 멈추던 문제 → 상세가 다 열린 뒤 카드 맨 위로 바로 이동 */
+    function go() { try { card.scrollIntoView({ block: "start" }); } catch (e) { card.scrollIntoView(true); } }
+    if (ev && ev.getAttribute("data-open") !== "1" && btn) {
+      btn.click(); go();
+      var n = 0, t = setInterval(function () {
+        var done = ev.getAttribute("data-open") === "1" && ev.innerText.trim().length > 0 && !document.querySelector("#wcCupHistOly.show");
+        if (done || ++n > 40) { clearInterval(t); go(); setTimeout(go, 400); }
+      }, 150);
+    } else go();
+    rkFlash([card]);
   };
   /* 커핑 카드의 '로스팅한 생두 N종' 태그 → 그 생두 로스팅 행으로 이동 · 잠깐 강조 */
   window.memRoastShow = function (sid) {
