@@ -6505,11 +6505,19 @@ window.hideCalibration = async function() {
     if (more && more.style.display === "none" && rows.some(function (el) { return more.contains(el); }) && typeof window.memToggleMore === "function") window.memToggleMore("memRoastMore");
     rkScroll(rows[0]); rkFlash(rows);
   };
+  /* 11-09: 예약이 끝났는지 (끝나기 전엔 '로스팅할 생두', 끝난 뒤엔 '로스팅한 생두') */
+  window.wcResEnded = window.wcResEnded || function (d, t) {
+    var m = String(d || "").match(/(\d{4})-(\d{2})-(\d{2})/), tt = String(t || "").split("~");
+    if (!m) return true;
+    var hm = function (x) { var k = String(x || "").match(/(\d{1,2}):(\d{2})/); return k ? +k[1] * 60 + +k[2] : null; };
+    var st = hm(tt[0]), en = hm(tt[1]); if (en == null) en = st == null ? 1440 : st; if (st != null && en <= st) en += 1440;
+    return Date.now() >= new Date(+m[1], +m[2] - 1, +m[3]).getTime() + en * 60000;
+  };
   function resSub(r) {
     var bs = Array.isArray(r.plan_beans) ? r.plan_beans : [];
     var seen = {}, names = [];   /* 같은 생두를 발주 2건으로 고른 경우 한 번만 (멤버 페이지와 동일) */
     bs.forEach(function (b) { if (!b || !String(b.name || "").trim()) return; var k = rkNorm(b.name); if (seen[k]) return; seen[k] = 1; names.push(String(b.name).trim() + (b.vendor ? " (" + String(b.vendor).trim() + ")" : "")); });
-    if (names.length) return "로스팅한 생두 · " + names.join(", ");
+    if (names.length) return (window.wcResEnded(r.res_date, r.res_time) ? "로스팅한 생두 · " : "로스팅할 생두 · ") + names.join(", ");   /* 11-09 */
     if (r.purpose) return "트레이닝 · " + String(r.purpose).trim();
     return "";
   }
@@ -9857,7 +9865,8 @@ window.hideCalibration = async function() {
     var z = zoneOf(r.space_equip), h = "";
     if (z === "로스팅존") {
       var bs = (me && Array.isArray(me.plan_beans) ? me.plan_beans : []).map(function (b) { return String(b && b.name || "").trim(); }).filter(Boolean);
-      h += '<div class="sec"><div class="k">이 예약</div><div class="v">' + (bs.length ? '<b>로스팅한 생두</b> · ' + esc(bs.join(", ")) : '<em>로스팅한 생두를 적지 않았어요</em>') + '</div></div>';
+      var lbN = (typeof window.wcResEnded === "function" && window.wcResEnded(r.res_date || (me && me.res_date), r.res_time)) ? "로스팅한 생두" : "로스팅할 생두";   /* 11-09: 이용 끝나기 전엔 '로스팅할 생두' */
+      h += '<div class="sec"><div class="k">이 예약</div><div class="v">' + (bs.length ? '<b>' + lbN + '</b> · ' + esc(bs.join(", ")) : '<em>' + lbN + '를 적지 않았어요</em>') + '</div></div>';
     } else if (z) {
       var pp = me && String(me.purpose || "").trim();
       h += '<div class="sec"><div class="k">이 예약</div><div class="v">' + (pp ? '<b>트레이닝</b> · ' + esc(pp) : '<em>트레이닝 종류를 고르지 않았어요</em>') + '</div></div>';
