@@ -6466,7 +6466,7 @@ window.hideCalibration = async function() {
     }
     else if (c.t && c.t > Date.now()) right = '<span style="' + gray + '">커핑 세션 예정 · ' + esc(rkMD(c.date)) + '</span>';
     else right = '<span style="' + gray + '">커핑 ' + esc(rkMD(c.date)) + ' · 평가 미입력</span>';
-    return '<div data-roast-row="1" data-roast-sess="' + rkAttr(c ? c.sid : "") + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid #eef0f3;border-radius:10px;padding:11px 12px;margin-bottom:6px;transition:border-color .3s,box-shadow .3s;">' +
+    return '<div data-roast-row="1" data-roast-res="' + rkAttr(row.resId) + '" data-roast-sess="' + rkAttr(c ? c.sid : "") + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid #eef0f3;border-radius:10px;padding:11px 12px;margin-bottom:6px;transition:border-color .3s,box-shadow .3s;">' +
       '<div style="min-width:0;flex:1 1 220px;"><div style="font-size:13px;font-weight:700;color:#191f28;word-break:keep-all;">' + esc(row.name) +
         (row.vendor ? ' <span style="font-weight:500;color:#8b95a1;">· ' + esc(row.vendor) + '</span>' : '') + '</div>' +
         '<div style="font-size:12px;color:#6b7684;margin-top:3px;line-height:1.5;">' + esc(row.sub) + '</div></div>' + right + '</div>';
@@ -8042,6 +8042,28 @@ window.hideCalibration = async function() {
       setTimeout(function () { el.style.borderColor = bc; el.style.boxShadow = bs; }, 2600);
     }, 250);
   }
+  /* 11-09: 로스팅존 예약 알림 → '로스팅 기록'의 그 예약 줄로 (상세를 다 불러온 뒤 · 접힌 목록이면 펼침 · 4초 강조) */
+  function focusRoast(id) {
+    var sel = '[data-roast-res="' + String(id).replace(/"/g, "") + '"]', t0 = Date.now();
+    var t = setInterval(function () {
+      var busy = !!document.getElementById("wcHistSpin"), els = document.querySelectorAll(sel);
+      if (busy || !els.length) {
+        if (!busy && Date.now() - t0 > 3000) { clearInterval(t); focusRes(id); }   /* 로스팅 기록 줄이 없으면 센터 예약 이력 줄로 */
+        else if (Date.now() - t0 > 15000) clearInterval(t);
+        return;
+      }
+      clearInterval(t);
+      var more = document.getElementById("memRoastMore");
+      if (more && more.style.display === "none" && Array.prototype.some.call(els, function (el) { return more.contains(el); }) && typeof window.memToggleMore === "function") window.memToggleMore("memRoastMore");
+      var go = function () { var e = document.querySelector(sel); if (e) { try { e.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (x) { e.scrollIntoView(); } } };
+      go(); setTimeout(go, 700);
+      Array.prototype.forEach.call(document.querySelectorAll(sel), function (el) {
+        var bc = el.style.borderColor, bs = el.style.boxShadow;
+        el.style.borderColor = "var(--primary,#ff7900)"; el.style.boxShadow = "0 0 0 3px rgba(255,121,0,.18)";
+        setTimeout(function () { el.style.borderColor = bc; el.style.boxShadow = bs; }, 4000);
+      });
+    }, 250);
+  }
   /* 11-06: 멤버 상세가 다 그려지면 '커핑 세션 이력'의 그 세션 카드로 이동 · 상세 열기
      호스트가 평가하지 않은 세션은 카드가 없음 → 안내만 */
   function focusCup(sid) {
@@ -8139,7 +8161,7 @@ window.hideCalibration = async function() {
         close();
         if (a.member_phone && typeof window.openHistoryModal === "function") {
           window.openHistoryModal(a.member_phone, a.member_name || "멤버");
-          if (a.kind === "roast_plan" && a.ref_id) focusRes(String(a.ref_id));   // 10-31: 로스팅 기록 알림 → 그 예약 줄로 이동·잠깐 강조
+          if (a.kind === "roast_plan" && a.ref_id) focusRoast(String(a.ref_id));   // 11-09: 로스팅존 예약 알림 → 멤버 상세 '로스팅 기록'의 그 예약 줄 (없으면 센터 예약 이력 줄)
           if ((a.kind === "note_add" || a.kind === "note_ack") && a.ref_id) focusNote(String(a.ref_id));   // 11-05: 코멘트 알림 → 그 코멘트로
           if (/^mcup_/.test(String(a.kind || "")) && a.ref_id) focusCup(String(a.ref_id));   // 11-06: 멤버 커핑 세션 알림 → 멤버 상세 '커핑 세션 이력'의 그 세션 카드로 이동 · 상세 열기
         }
