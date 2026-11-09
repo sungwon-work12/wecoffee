@@ -8019,9 +8019,10 @@ window.hideCalibration = async function() {
     var sel = '[data-cmt-ref="' + scope + ':' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]';
     var stale = document.querySelector(sel);   /* 11-05: 다시 그려지기 전 예전 줄은 건너뜀 */
     var n = 0, t = setInterval(function () {
-      var el = document.querySelector(sel);
-      if (!el || (el === stale && n < 16)) { n++; if (n > 40) clearInterval(t); return; }
+      var el = document.querySelector(sel), busy = !!document.getElementById("wcHistSpin");   /* 11-09: 멤버 상세를 다 불러온 뒤에 이동 (불러오는 중에 옮기면 화면이 다시 그려지며 맨 위로 돌아감) */
+      if (!el || busy || (el === stale && n < 16)) { n++; if (n > 60) clearInterval(t); return; }
       clearInterval(t);
+      setTimeout(function () { var e2 = document.querySelector(sel); if (e2) { try { e2.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (x) { e2.scrollIntoView(); } } }, 700);   /* 11-09: 늦게 채워지는 블록으로 위치가 밀리면 한 번 더 */
       var more = el.closest('[id^="mem"][id$="More"]'); if (more && more.style.display === "none" && typeof window.memToggleMore === "function") window.memToggleMore(more.id);
       /* 11-05: 코멘트 알림 → 그 줄의 코멘트를 펼친 채로, 해당 코멘트 강조 */
       if (noteId) {
@@ -8906,14 +8907,14 @@ window.hideCalibration = async function() {
     recs.forEach(function (x) {
       var ref = v.refs[x.r.bean_id], rn = uniqNotes((ref && ref.ref_notes) || []); if (!rn.length) return;
       var mine = {}; x.notes.forEach(function (n) { mine[nk(n)] = 1; });
-      var ss = bySess[x.sid] = bySess[x.sid] || { at: x.at, tot: 0, hit: 0 };
+      var ss = bySess[x.sid] = bySess[x.sid] || { at: x.at, tot: 0, hit: 0, cups: 0 }; ss.cups++;   /* 11-09: 한 잔당 맞힌 수 */
       rn.forEach(function (n) {
         var k = nk(n), h = !!mine[k];
         ss.tot++; if (h) ss.hit++;
         (occ[k] = occ[k] || { label: n, list: [] }).list.push({ at: x.at, hit: h });
       });
     });
-    var pts = Object.keys(bySess).map(function (k) { var s = bySess[k]; return { at: s.at, rate: s.tot ? Math.round(s.hit / s.tot * 100) : 0 }; }).sort(function (a, b) { return a.at - b.at; });
+    var pts = Object.keys(bySess).map(function (k) { var s = bySess[k]; return { at: s.at, rate: s.tot ? Math.round(s.hit / s.tot * 100) : 0, hits: s.cups ? s.hit / s.cups : 0 }; }).sort(function (a, b) { return a.at - b.at; });
     var missed = [], late = [];
     Object.keys(occ).forEach(function (k) {
       var o = occ[k], list = o.list.sort(function (a, b) { return a.at - b.at; }), hits = list.filter(function (z) { return z.hit; }).length;
@@ -9137,6 +9138,7 @@ window.hideCalibration = async function() {
     var nd = window.wcNoteData ? await window.wcNoteData(d) : { recs: [], sess: {}, refs: {} };
     var c = window.wcNoteGrowthCompute ? window.wcNoteGrowthCompute(nd) : { pts: [], recs: [] };
     var hit = (c.pts || []).map(function (p) { return { at: p.at, v: p.rate }; });
+    var hpc = (c.pts || []).filter(function (p) { return p.hits != null; }).map(function (p) { return { at: p.at, v: p.hits }; });   /* 11-09: 한 잔에서 맞힌 로스터 컵노트 수 */
     var perSess = {};
     (c.recs || []).forEach(function (x) { (perSess[x.sid] = perSess[x.sid] || { at: x.at, n: [] }).n.push(x.notes.length); });
     var cnt = Object.keys(perSess).map(function (k) { return { at: perSess[k].at, v: avg(perSess[k].n) }; }).sort(function (a, b) { return a.at - b.at; });
@@ -9148,7 +9150,7 @@ window.hideCalibration = async function() {
     var all = [].concat(hit, sens, cnt).map(function (p) { return p.at; }).concat(notes.map(function (n) { return ts(n.created_at); })).filter(Boolean);
     var t0 = all.length ? Math.min.apply(null, all) : 0, t1 = all.length ? Math.max.apply(null, all) : 0;
     var acc = sens.map(function (p) { return { at: p.at, v: devToAcc(p.v) }; });
-    var out = { phone: d, hit: hit, cnt: cnt, sens: sens, acc: acc, score: score, notes: notes, res: res, t0: t0, t1: t1, cupN: Object.keys(perSess).length, nd: nd, c: c };
+    var out = { phone: d, hit: hit, hpc: hpc, cnt: cnt, sens: sens, acc: acc, score: score, notes: notes, res: res, t0: t0, t1: t1, cupN: Object.keys(perSess).length, nd: nd, c: c };
     _rep[d] = out;
     return out;
   }
@@ -9549,36 +9551,53 @@ window.hideCalibration = async function() {
     for (var i = 1; i < g.hit.length; i++) { var d = g.hit[i].v - g.hit[i - 1].v; if (!jump || d > jump.d) jump = { d: d, a: g.hit[i - 1].at, b: g.hit[i].at }; }
     var turn = null;
     if (jump) g.notes.forEach(function (n) { var t = ts(n.created_at); if (n.visible && t <= jump.b && t >= first && (n.eval_domain === "센서리" || ["session", "bean", "member"].indexOf(n.scope) >= 0)) { if (!turn || t > ts(turn.created_at)) turn = n; } });
-    return { e: Math.round(k.e), r: Math.round(k.r), ce: ck.e, cr: ck.r, weeks: weeksTxt(first, last), cups: g.hit.length, coach: g.notes.length, turn: turn, firstAt: first, lastAt: last, grew: Math.round(k.r) - Math.round(k.e) >= GROW.hit };
+    var hk = cmp(g.hpc || [], w), he = hk.e == null ? null : Math.round(hk.e), hr = hk.r == null ? null : Math.floor(hk.r + 1e-9);   /* 11-09: 처음은 반올림 · 지금은 내림('N개 이상') */
+    return { e: Math.round(k.e), r: Math.round(k.r), he: he, hr: hr, hx: hk.e, hy: hk.r, ce: ck.e, cr: ck.r, weeks: weeksTxt(first, last), cups: g.hit.length, coach: g.notes.length, turn: turn, firstAt: first, lastAt: last, grew: he != null && hr != null && hr - he >= GROW.hpc };
   }
   /* 11-05: 성장 카드는 눈에 띄게 늘어난 지표로만 — 기준 미달이면 카드를 만들지 않음 */
-  var GROW = { hit: 5, acc: 0.5, voc: 3 };   // 레퍼런스 컵노트 +5%p · 센서리 정확도 +0.5 · 표현 범위 +3가지
+  var GROW = { hit: 5, hpc: 1, acc: 0.5, voc: 3 };   // 11-09: 한 잔에서 맞힌 로스터 컵노트 +1개 · 교육 매니저와 맞는 정도 +0.5 · 쓰는 컵노트 +3가지
   function vocabSeries(g) {   // 커핑 회차마다 지금까지 쓴 표현 가짓수(누적)
     var by = {}; ((g.c && g.c.recs) || []).forEach(function (x) { (by[x.sid] = by[x.sid] || { at: x.at, n: [] }).n = by[x.sid].n.concat(x.notes || []); });
     var seen = {}; return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return a.at - b.at; }).map(function (x) { x.n.forEach(function (t) { var q = nk(t); if (q) seen[q] = 1; }); return { at: x.at, v: Object.keys(seen).length }; });
   }
   function sensoryBest() {
     var g = GC.g, w = windows("j", g.t0, Date.now(), g.t1), cands = [];
-    var hd = sensoryData(); if (hd && hd.grew) cands.push({ type: "hit", sc: (hd.r - hd.e) / GROW.hit, d: hd });
+    var hd = sensoryData(); if (hd && hd.grew) cands.push({ type: "hit", sc: (hd.hr - hd.he) / GROW.hpc, d: hd });
     var ak = cmp(g.acc || [], w);
-    if (ak.e != null && ak.r != null && r1(ak.r) - r1(ak.e) >= GROW.acc) { var aa = (g.acc || []).slice().sort(function (a, b) { return a.at - b.at; }); cands.push({ type: "acc", sc: (ak.r - ak.e) / GROW.acc, d: { e: r1(ak.e), r: r1(ak.r), pts: aa, firstAt: aa[0].at, lastAt: aa[aa.length - 1].at, weeks: weeksTxt(aa[0].at, aa[aa.length - 1].at), cups: aa.length } }); }
+    if (false && ak.e != null && ak.r != null && r1(ak.r) - r1(ak.e) >= GROW.acc) {   /* 11-09: 점수는 내부용 — 카드로 만들지 않음 */ var aa = (g.acc || []).slice().sort(function (a, b) { return a.at - b.at; }); cands.push({ type: "acc", sc: (ak.r - ak.e) / GROW.acc, d: { e: r1(ak.e), r: r1(ak.r), pts: aa, firstAt: aa[0].at, lastAt: aa[aa.length - 1].at, weeks: weeksTxt(aa[0].at, aa[aa.length - 1].at), cups: aa.length } }); }
     var vb = vocabOf(g, w), vs = vocabSeries(g);
     if (vs.length >= 2 && vb.total - vb.before >= GROW.voc) cands.push({ type: "voc", sc: (vb.total - vb.before) / GROW.voc, d: { e: vb.before, r: vb.total, pts: vs, firstAt: vs[0].at, lastAt: vs[vs.length - 1].at, weeks: weeksTxt(vs[0].at, vs[vs.length - 1].at), cups: vs.length, lbl: vb.lbl } });
     cands.sort(function (a, b) { return b.sc - a.sc; });
     return cands[0] || null;
   }
   function ratioHead(e, r) { if (e > 0 && r / e >= 1.5) { var x = r / e; return "레퍼런스 컵노트를<br>" + (x >= 2.75 ? "세 배 가까이" : x >= 2.25 ? "두 배 넘게" : x >= 1.75 ? "두 배 가까이" : "1.5배") + " 더 짚게 됐어요"; } return "레퍼런스 컵노트를<br>" + e + "%에서 " + r + "%까지 짚게 됐어요"; }
-  function cardSensory(best) {
-    var d = best.d, T = best.type;
-    var head = T === "hit" ? ratioHead(d.e, d.r) : (T === "acc" ? "센서리 정확도를<br>" + d.e + "에서 " + d.r + "까지 올렸어요" : "쓸 수 있는 향미 표현이<br>" + d.e + "가지에서 " + d.r + "가지로 늘었어요");
-    var pts = T === "hit" ? GC.g.hit : d.pts, u = T === "hit" ? "%" : (T === "voc" ? "가지" : "");
-    var cap = T === "hit" ? "레퍼런스 컵노트 중 짚은 비율 · " + d.weeks + " 동안 커핑 " + d.cups + "번"
-      : (T === "acc" ? "센서리 정확도 · 10점 만점 · " + d.weeks + " 동안 센서리 평가 " + d.cups + "번" : "지금까지 쓴 향미 표현 · " + d.weeks + " 동안 커핑 " + d.cups + "번");
+  function nm() { return GC.mask ? maskName(GC.name) : String(GC.name || ""); }   /* 11-09: 카드 주어 'OO 님' */
+  function gain(e, r, ex, ey) {   /* 11-09: 성과 표현 — 실제 평균 기준 2배 이상이면 'N배'(내림), 아니면 'N개 더' (0에서 시작하면 'N개') */
+    if (e >= 1 && ex > 0 && ey / ex >= 2) return Math.floor(ey / ex + 1e-9) + "배";
+    if (e >= 1) return (r - e) + "개 더";
+    return r + "개";
+  }
+  function OR(t) { return '<span style="color:#ff7900">' + t + '</span>'; }
+  function ba(e, r, u) { var L = 'display:block;font-size:12.5px;font-weight:700;opacity:.7;margin-bottom:6px;letter-spacing:0;'; return '<div class="big"><span class="a"><small style="' + L + '">처음</small>' + e + u + '</span><span class="b"><small style="' + L + 'color:inherit;">지금</small>' + r + u + '</span></div>'; }
+  function cardSensory(best) {   /* 11-09: 카피 정리 — 그래프 삭제 · 주어 'OO 님' · 내부 용어(레퍼런스·센서리 정확도) 제거 */
+    var d = best.d, T = best.type, head, big, cap;
+    if (T === "hit") {
+      var gx = gain(d.he, d.hr, d.hx, d.hy);
+      head = esc(nm()) + " 님은 " + d.weeks + " 만에<br>교육 매니저와 같이 느끼는 컵노트가<br>" + OR(/배$/.test(gx) ? gx + "로 늘었어요" : (d.he >= 1 ? gx + " 늘었어요" : "0개에서 " + gx + "가 되었어요"));
+      big = ba(d.he, d.hr, "개");
+      cap = "원두 한 잔에서 교육 매니저와 같이 느낀 컵노트 수 · 처음 3번과 최근 3번 평균 · " + d.weeks + " 동안 커핑 " + d.cups + "번";
+    } else if (T === "acc") {
+      head = esc(nm()) + " 님이 느끼는 맛이<br>교육 매니저와 점점 같아졌어요";
+      big = ba(d.e, d.r, "점");
+      cap = "같은 커피를 교육 매니저와 얼마나 비슷하게 느꼈는지 · 10점 만점 · " + d.weeks + " 동안 커핑 " + d.cups + "번";
+    } else {
+      head = esc(nm()) + " 님이 쓰는 컵노트가<br>" + d.e + "가지에서 " + d.r + "가지로 늘었어요";
+      big = ba(d.e, d.r, "가지");
+      cap = "지금까지 쓴 컵노트 가짓수 · " + d.weeks + " 동안 커핑 " + d.cups + "번";
+    }
     return '<div class="pc" data-name="센서리성장">' +
-      '<div class="lg">' + logoImg(false) + '</div><div class="k">센서리 성장</div>' + ed("hd", head) +
-      '<div class="pr">' + spark(pts) + '<div class="spl"><span>' + tick(d.firstAt) + '</span><span>' + tick(d.lastAt) + '</span></div></div>' +
-      '<div class="big"><span class="a">' + d.e + u + '</span><span class="b">' + d.r + u + '</span></div>' +
-      '<div class="cap">' + cap + '</div>' +
+      '<div class="lg">' + logoImg(false) + '</div><div class="k">센서리 훈련 기록</div>' + ed("hd", head) +
+      big + '<div class="cap">' + cap + '</div>' +
       '<div class="q">' + ed("qq", "", "멤버 한마디를 적어 주세요 (비워 두면 빠져요)") + '<small>' + esc(who()) + ' 님</small></div>' + foot() + '</div>';
   }
   function roastData() {   // 로스팅 점수가 오른 묶음 (같은 생두를 다시 볶은 기록이 있는 것 먼저)
@@ -9586,43 +9605,52 @@ window.hideCalibration = async function() {
     return l.filter(function (x) { return x.roasts; })[0] || l[0] || null;
   }
   function trimQ(t, n) { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n) + "…" : t; }
-  function cardRoast(it) {
-    var A = it.a, B = it.b, N = it.roasts || 0, dots = "";
-    for (var i = 0; i < Math.max(2, N); i++) dots += (i ? "<b></b>" : "") + '<i class="' + (i === 0 ? "x" : (i === Math.max(2, N) - 1 ? "o" : "")) + '"></i>';
+  function cardRoast(it) {   /* 11-09: 성과 제목 + 로스팅존 예약 기록(같은 생두를 볶은 배치) */
+    var N = it.roasts || 0, rl = (it.resList || []).slice(0, N || (it.resList || []).length);
+    var KN = ["", "한", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열"];
+    var head = "교육 매니저 코칭 덕분에<br>" + (N ? (KN[N] || N) + " 배치 만에<br>" : it.days + "일 만에<br>") + OR("프로파일이 잡혔어요");
+    if (rl.length > 5) rl = rl.slice(0, 2).concat([null]).concat(rl.slice(-2));
+    var eqOf = function (x) { var m = String(x.space_equip || "").match(/\((.*)\)\s*$/); return m ? m[1] : ""; };
+    var tmOf = function (x) { return String(x.res_time || "").replace(/\s*~\s*/, " ~ "); };
+    var L = 'display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid rgba(255,255,255,.12);font-size:13px;';
+    var rows = rl.map(function (x, i) {
+      if (!x) return '<div style="' + L + 'opacity:.5;">…</div>';
+      var k = (it.resList || []).indexOf(x) + 1, last = x === rl[rl.length - 1];
+      return '<div style="' + L + '"><b style="flex:0 0 34px;color:' + (last ? '#ff7900' : 'inherit') + ';font-weight:800;">' + k + '차</b><span style="flex:1;opacity:.85;">' + mdw(ts(x.res_date)) + (tmOf(x) ? ' · ' + esc(tmOf(x)) : '') + '</span><span style="opacity:.55;">' + esc(eqOf(x)) + '</span></div>';
+    }).join("");
+    var log = rl.length ? '<div style="margin-top:auto;">' + (it.bean ? '<div style="font-size:12.5px;font-weight:700;opacity:.6;margin-bottom:8px;">' + esc(trimQ(it.bean, 34)) + ' 로스팅 기록</div>' : '') + rows + '</div>' : '';
     return '<div class="pc dk" data-name="로스팅코칭">' +
-      '<div class="lg">' + logoImg(true) + '</div><div class="k">로스팅 코칭</div>' + ed("hd", (N ? "같은 생두 " + N + "번 로스팅,<br>" : "") + it.days + "일 만에 찾은 답") +
-      (N ? '<div class="pr"><div class="at">' + dots + '</div><div class="spl"><span>1차 · ' + mdw(ts(it.resList[0].res_date)) + '</span><span>' + N + '차 · ' + mdw(ts(it.resList[N - 1].res_date)) + '</span></div></div>' : '') +
-      '<div class="cap" style="margin-top:auto">' + esc(it.bean ? trimQ(it.bean, 30) : "교육 매니저 코칭") + (it.cups ? ' · 커핑 ' + it.cups + '번' : '') + '</div>' +
-      '<div class="q">' + ((A.visible && B.visible) ? ed("qq", '"' + esc(trimQ(A.note, 40)) + '" → "' + esc(trimQ(B.note, 40)) + '"') : ed("qq", "", "코멘트를 적어 주세요 (비공개 코멘트는 카드에 넣지 않아요)")) + '<small>교육 매니저 코멘트 · ' + esc(who()) + ' 님</small></div>' + foot() + '</div>';   /* 11-05: 멤버에게 공개한 코멘트만 카드에 */
+      '<div class="lg">' + logoImg(true) + '</div><div class="k">로스팅 훈련 기록</div>' + ed("hd", head) + log +
+      '<div class="q"' + (log ? '' : ' style="margin-top:auto"') + '>' + ed("qq", "", "멤버 한마디를 적어 주세요 (비워 두면 빠져요)") + '<small>' + esc(who()) + ' 님</small></div>' + foot() + '</div>';
   }
-  function cardPeer(p) {
+  function cardPeer(p) {   /* 11-09: 카피 정리 — 흐름은 선 없이 글자로 */
     return '<div class="pc" data-name="함께커핑">' +
-      '<div class="lg">' + logoImg(false) + '</div><div class="k">함께 커핑</div>' + ed("hd", "내가 볶은 원두를<br>동료 " + p.n + "명이 함께 평가했어요") +
-      '<div class="pr"><div class="fw"><span>로스팅</span><em></em><span class="on">동료 ' + p.n + '명과 커핑</span>' + (p.again ? '<em></em><span>다시 로스팅</span>' : '') + '</div></div>' +
+      '<div class="lg">' + logoImg(false) + '</div><div class="k">동료 커핑</div>' + ed("hd", esc(nm()) + " 님이 로스팅한 원두를<br>동료 멤버 " + p.n + "명이 함께 커핑했어요") +
+      '<div class="pr"><div class="fw"><span>로스팅</span><span>→</span><span class="on">동료 멤버 ' + p.n + '명과 커핑</span>' + (p.again ? '<span>→</span><span>다시 로스팅</span>' : '') + '</div></div>' +
       '<div class="peer">' + p.top.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join("") + '</div>' +
-      '<div class="cap" style="margin-top:8px">동료들이 짚은 노트</div>' +
+      '<div class="cap" style="margin-top:8px">동료 멤버들이 느낀 컵노트</div>' +
       '<div class="q">' + ed("qq", "", "멤버 한마디를 적어 주세요 (비워 두면 빠져요)") + '<small>' + esc(who()) + ' 님</small></div>' + foot() + '</div>';
   }
-  function carousel(d) {
+  function carousel(d) {   /* 11-09: 카피 정리 — 레퍼런스 비율 대신 한 잔에서 맞힌 로스터 컵노트 수 · 그래프 삭제 · '전환점' 삭제 */
     var pg = function (i) { return '<div class="ft"><span></span><span>' + i + ' / 5</span></div>'; };
-    var cnt = (d.ce != null && d.cr != null) ? Math.round(d.ce) + "개" : null;
+    var weekly = (d.lastAt - d.firstAt) / Math.max(1, d.cups - 1) <= 9 * DAY;
     return [
-      '<div class="pc dk sl" data-name="넘겨보기_1"><div class="lg">' + logoImg(true) + '</div><div class="k">센서리 성장 · ' + d.weeks + '</div>' + ed("hd", cnt ? "컵노트 " + cnt + "에서<br>레퍼런스 " + d.r + "%를<br>짚기까지" : "레퍼런스 컵노트<br>" + d.e + "%에서 " + d.r + "%까지") +
-        '<div class="q" style="margin-top:auto">' + esc(who()) + ' 님의 ' + d.weeks + '</div><div class="ft"><span>커피 트레이닝 커뮤니티 위커피</span><span>1 / 5</span></div></div>',
-      '<div class="pc sl" data-name="넘겨보기_2"><div class="lg">' + logoImg(false) + '</div><div class="k">처음 · ' + mdw(d.firstAt) + '</div>' + ed("hd", cnt ? "처음엔 한 컵에<br>노트를 " + cnt + " 적었어요" : "처음 커핑에서") +
-        '<div class="big"><span class="b" style="color:#191f28">' + d.e + '%</span></div><div class="cap">레퍼런스 컵노트 중 짚은 비율</div>' + pg(2) + '</div>',
-      '<div class="pc sl" data-name="넘겨보기_3"><div class="lg">' + logoImg(false) + '</div><div class="k">' + d.weeks + ' 동안</div>' + ed("hd", ((d.lastAt - d.firstAt) / Math.max(1, d.cups - 1) <= 9 * DAY ? "매주" : "꾸준히") + " 커핑하며<br>기준을 만들었어요") +
-        '<div class="pr" style="margin-top:auto">' + spark(GC.g.hit) + '<div class="spl"><span>' + tick(d.firstAt) + '</span><span>' + tick(d.lastAt) + '</span></div></div><div class="cap">커핑 ' + d.cups + '번 · 교육 매니저 코칭 ' + d.coach + '번</div>' + pg(3) + '</div>',
-      '<div class="pc dk sl" data-name="넘겨보기_4"><div class="lg">' + logoImg(true) + '</div><div class="k">전환점' + (d.turn ? ' · ' + mdw(ts(d.turn.created_at)) : '') + '</div>' + ed("hd", "교육 매니저의 한 줄") +
-        '<div class="q" style="margin-top:auto;font-size:17px;line-height:1.6;opacity:1">' + ed("qq", d.turn ? '"' + esc(trimQ(d.turn.note, 70)) + '"' : "", "코멘트를 적어 주세요") + '<small>교육 매니저 코멘트</small></div>' + pg(4) + '</div>',
-      '<div class="pc sl" data-name="넘겨보기_5"><div class="lg">' + logoImg(false) + '</div><div class="k">지금 · ' + mdw(d.lastAt) + '</div>' + ed("hd", "레퍼런스 컵노트의<br>" + (d.r >= 50 ? "절반 이상을" : d.r + "%를") + " 짚어요") +
-        '<div class="big"><span class="a">' + d.e + '%</span><span class="b">' + d.r + '%</span></div><div class="cap">레퍼런스 컵노트 중 짚은 비율</div>' +
+      '<div class="pc dk sl" data-name="넘겨보기_1"><div class="lg">' + logoImg(true) + '</div><div class="k">센서리 훈련 기록 · ' + d.weeks + '</div>' + ed("hd", esc(nm()) + " 님은 " + d.weeks + " 만에<br>교육 매니저와 같이 느끼는<br>컵노트가 " + OR(/배$/.test(gain(d.he, d.hr, d.hx, d.hy)) ? gain(d.he, d.hr, d.hx, d.hy) + "가 되었어요" : gain(d.he, d.hr, d.hx, d.hy) + " 늘었어요")) +
+        '<div class="ft"><span>커피 트레이닝 커뮤니티 위커피</span><span>1 / 5</span></div></div>',
+      '<div class="pc sl" data-name="넘겨보기_2"><div class="lg">' + logoImg(false) + '</div><div class="k">처음 · ' + mdw(d.firstAt) + '</div>' + ed("hd", d.he >= 1 ? "처음 커핑에서는<br>교육 매니저와 같은 컵노트를<br>한 잔에 " + d.he + "개 느꼈어요" : "처음 커핑에서는<br>교육 매니저와 같은 컵노트를<br>거의 느끼지 못했어요") +
+        '<div class="big"><span class="b" style="color:#191f28">' + d.he + '개</span></div><div class="cap">원두 한 잔에서 교육 매니저와 같이 느낀 컵노트 수 · 처음 3번 평균</div>' + pg(2) + '</div>',
+      '<div class="pc sl" data-name="넘겨보기_3"><div class="lg">' + logoImg(false) + '</div><div class="k">' + d.weeks + ' 동안</div>' + ed("hd", (weekly ? "매주" : "꾸준히") + " 커핑하고<br>교육 매니저 코칭을<br>" + d.coach + "번 받았어요") +
+        '<div class="cap" style="margin-top:auto">' + d.weeks + ' 동안 커핑 ' + d.cups + '번</div>' + pg(3) + '</div>',
+      '<div class="pc dk sl" data-name="넘겨보기_4"><div class="lg">' + logoImg(true) + '</div><div class="k">교육 매니저 코멘트' + (d.turn ? ' · ' + mdw(ts(d.turn.created_at)) : '') + '</div>' +
+        '<div class="q" style="margin-top:auto;font-size:17px;line-height:1.6;opacity:1;border-top:none;padding-top:0">' + ed("qq", d.turn ? '"' + esc(trimQ(d.turn.note, 70)) + '"' : "", "코멘트를 적어 주세요") + '</div>' + pg(4) + '</div>',
+      '<div class="pc sl" data-name="넘겨보기_5"><div class="lg">' + logoImg(false) + '</div><div class="k">지금 · ' + mdw(d.lastAt) + '</div>' + ed("hd", d.weeks + " 만에 " + d.he + "개에서 " + d.hr + "개로,<br>교육 매니저와 같이 느끼는<br>컵노트가 " + OR(/배$/.test(gain(d.he, d.hr, d.hx, d.hy)) ? gain(d.he, d.hr, d.hx, d.hy) + "가 되었어요" : gain(d.he, d.hr, d.hx, d.hy) + " 늘었어요")) +
+        ba(d.he, d.hr, "개") + '<div class="cap">원두 한 잔에서 교육 매니저와 같이 느낀 컵노트 수 · 처음 3번과 최근 3번 평균</div>' +
         '<div class="q">' + ed("qq", "멤버 모집 중") + '</div>' + pg(5) + '</div>'
     ].join("");
   }
   /* ═══ 카드별 배경 (11-05) — 이미지 · 덮개(단색/그라디언트) · 투명도 · 글자 색. 저장 안 함 ═══ */
   var BG_SW = ["#191f28", "#000000", "#3b2a20", "#ff7900", "#ffffff"];
-  var BG_NM = { "센서리성장": "센서리 성장", "로스팅코칭": "로스팅 코칭", "함께커핑": "함께 커핑" };
+  var BG_NM = { "센서리성장": "센서리 훈련 기록", "로스팅코칭": "로스팅 훈련 기록", "함께커핑": "동료 커핑" };
   function bgName(n) { var m = /^넘겨보기_(\d)$/.exec(n || ""); return m ? "넘겨 보기 " + m[1] + "장" : (BG_NM[n] || n || ""); }
   function bgOf(n) { return GC.bg[n] = GC.bg[n] || { img: "", pos: 50, mode: "solid", c1: "#191f28", dir: "to top", op: 55, tx: "lt" }; }
   function rgba(hex, a) { var h = String(hex || "#000").replace("#", ""); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return "rgba(" + parseInt(h.substr(0, 2), 16) + "," + parseInt(h.substr(2, 2), 16) + "," + parseInt(h.substr(4, 2), 16) + "," + Math.max(0, Math.min(1, a)) + ")"; }
@@ -9718,7 +9746,7 @@ window.hideCalibration = async function() {
     o.querySelectorAll("[data-gcm]").forEach(function (b) { b.classList.toggle("on", (b.getAttribute("data-gcm") === "1") === GC.mask); });
     body.classList.toggle("car", GC.fmt === "car");
     var h = "";
-    if (GC.fmt === "car") h = (sd && sd.grew) ? carousel(sd) : '<div class="gcem">' + (sd ? '레퍼런스 컵노트 비율이 아직 눈에 띄게 오르지 않아서 넘겨 보기는 만들 수 없어요. (처음 3회보다 +' + GROW.hit + '%p 이상일 때 만들어요)' : '레퍼런스 컵노트가 있는 커핑 기록이 2회 이상 있어야 만들 수 있어요.') + '</div>';
+    if (GC.fmt === "car") h = (sd && sd.grew) ? carousel(sd) : '<div class="gcem">' + (sd ? '교육 매니저와 같이 느낀 컵노트 수가 아직 늘지 않아서 넘겨 보기는 만들 수 없어요. (처음 3번보다 한 잔에 ' + GROW.hpc + '개 이상 늘었을 때 만들어요)' : '교육 매니저 컵노트가 있는 커핑 기록이 2번 이상 있어야 만들 수 있어요.') + '</div>';
     else {
       if (sb2) h += cardSensory(sb2);
       if (rd) h += cardRoast(rd);
@@ -9731,7 +9759,7 @@ window.hideCalibration = async function() {
     Array.prototype.forEach.call(body.querySelectorAll(".pc"), bgApply);
     bgPanel();
     var hint = [];
-    if (!sb2) hint.push("아직 눈에 띄게 늘어난 센서리 지표가 없어서 센서리 카드는 빠졌어요. (레퍼런스 컵노트 +" + GROW.hit + "%p · 센서리 정확도 +" + GROW.acc + " · 표현 범위 +" + GROW.voc + "가지 중 하나 이상)");
+    if (!sb2) hint.push("아직 눈에 띄게 늘어난 센서리 기록이 없어서 센서리 카드는 빠졌어요. (한 잔에서 교육 매니저와 같이 느낀 컵노트 +" + GROW.hpc + "개 · 쓰는 컵노트 +" + GROW.voc + "가지 중 하나 이상)");
     if (!rd) hint.push("로스팅 코칭 카드는 로스팅 점수를 남긴 코멘트가 앞보다 오르면 생겨요.");
     if (!pd) hint.push("함께 커핑 카드는 내가 볶은 원두를 다른 멤버가 평가한 커핑이 있으면 생겨요.");
     o.querySelector(".gcnote").innerHTML = "카드 속 제목과 따옴표 문장은 눌러서 고칠 수 있어요. 숫자와 날짜는 기록에서 가져와요." + (GC.fmt === "one" && hint.length ? "<br>" + esc(hint.join(" ")) : "");
