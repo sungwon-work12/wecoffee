@@ -2283,11 +2283,11 @@ window.wcRenderBlkList=function(fBlk){
   Object.keys(weeks).sort().forEach(wk=>{
     const items=weeks[wk];const ws=wcParseYmd(wk);const we=new Date(ws);we.setDate(ws.getDate()+6);
     const diff=Math.round((ws.getTime()-thisWeek)/(7*864e5));const title=diff===0?'이번 주':(diff===1?'다음 주':'');
-    const wc={};let aCur=0,aMax=0;items.forEach(b=>{wc[b.category]=(wc[b.category]||0)+1;const c=wcBlkCap(b);if(c.max>0){aCur+=c.cur;aMax+=c.max;}});
+    const wc={};items.forEach(b=>{wc[b.category]=(wc[b.category]||0)+1;});
     const sum=catList.filter(c=>wc[c]).map(c=>`${wcEsc(c)} ${wc[c]}`).join(' · ');
-    const range=`${wcMd(wk)} ~ ${wcMd(wcYmd(we))}`;const capSum=aMax?`신청 ${aCur}명 · 정원 ${aMax}명`:'';
-    const mSub=[title?range:'',`스케줄 ${items.length}개`,capSum].filter(Boolean).join(' · ');
-    h+=`<div class="wc-bl-week"><div class="wc-bl-wt">${title?`<b>${title}</b>`:''}<span>${range}</span></div><div class="wc-bl-ws"><span>${sum}</span>${aMax?`<i></i><span>신청 <b>${aCur}명</b> · 정원 ${aMax}명</span>`:''}</div>`+
+    const range=`${wcMd(wk)} ~ ${wcMd(wcYmd(we))}`;
+    const mSub=[title?range:'',`스케줄 ${items.length}개`].filter(Boolean).join(' · ');
+    h+=`<div class="wc-bl-week"><div class="wc-bl-wt">${title?`<b>${title}</b>`:''}<span>${range}</span></div><div class="wc-bl-ws"><span>${sum}</span></div>`+
       `<div class="wc-bl-wm"><b>${title||range}</b><span>${mSub}</span></div></div>`;
     /* 같은 반복 스케줄이 이 주에 2개 이상이면 한 줄로 */
     const groups={},rows=[];
@@ -2300,11 +2300,10 @@ window.wcRenderBlkList=function(fBlk){
     rows.forEach(r=>{
       if(r.b){const b=r.b;const isT=b.block_date===today;h+=wcBlkRow(b,{date:wcMd(b.block_date),today:isT,time:wcTimeText(b),when:isT?wcTimeText(b):`${wcMd(b.block_date)} ${wcTimeText(b)}`,cap:wcCapHtml(wcBlkCap(b)),capId:b.id});return;}
       const g=r.g,f=g[0],l=g[g.length-1];const key=f.series_id+'|'+wk;const open=!!window.__wcBlkOpen[key];
-      let cc=0,cm=0,hasCap=false;g.forEach(b=>{const c=wcBlkCap(b);if(c.max>0){hasCap=true;cc+=c.cur;cm+=c.max;}});
       const sameTime=g.every(b=>b.start_time===f.start_time&&b.end_time===f.end_time);
       const time=f.series_kind==='span'?`${f.start_time} → ${l.end_time}`:(sameTime?wcTimeText(f):'날마다 다름');
       const rule=wcSeriesRule(g);const dr=`${wcMdShort(f.block_date)} ~ ${wcMdShort(l.block_date)}`;
-      h+=wcBlkRow(f,{date:dr,today:g.some(b=>b.block_date===today),rule:rule,time:time,when:`${dr} ${rule.split(' · ')[0]} · ${time}`,cap:hasCap?wcCapNum(cc,cm):'<span class="wc-bl-dim">-</span>',toggle:key,open:open});
+      h+=wcBlkRow(f,{date:dr,today:g.some(b=>b.block_date===today),rule:rule,time:time,when:`${dr} ${rule.split(' · ')[0]} · ${time}`,cap:'<span class="wc-bl-dim">-</span>',toggle:key,open:open});
       if(open)g.forEach(b=>{const isT=b.block_date===today;const w=`${wcMd(b.block_date)} ${wcTimeText(b)}`;h+=`<div class="wc-bl-sub"><span class="d">${wcMd(b.block_date)}${isT?'<em>오늘</em>':''}</span><span class="t">${wcTimeText(b)}</span><span class="c" data-cap-id="${b.id}">${wcCapHtml(wcBlkCap(b))}</span><div class="a"><button type="button" class="btn-outline btn-sm" onclick="window.editBlock('${b.id}')">수정</button><button type="button" class="btn-outline btn-sm wc-bl-del" onclick="window.deleteBlock('${b.id}')">삭제</button><button type="button" class="wc-bl-more" aria-label="수정·삭제" onclick="window.wcBlkMore('${b.id}','${wcEsc(w).replace(/'/g,"\\'")}')">${WC_MORE_SVG}</button></div></div>`;});
     });
   });
