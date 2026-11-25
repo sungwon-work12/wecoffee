@@ -1034,7 +1034,7 @@ function generateOrderRows(fOrd, chkClass, dateKey) {
     let cTxtPreview = o.center?`<span style="background:var(--border);color:var(--text-secondary);padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;margin-right:6px;vertical-align:middle;white-space:nowrap;">${o.center}</span>`:'';
     let mPreview = `<td class="m-preview has-checkbox" onclick="this.closest('tr').classList.toggle('expanded')"><div class="m-prev-top"><span class="m-prev-date">${formatDtWithDow(o.created_at)}</span><span class="status-badge ${badgeClass}">${o.status}</span></div><div class="m-prev-title">${o.batch||'-'} <span style="font-weight:800;">${window.escapeHtml(o.name)}</span> <span style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-left:4px;">(${o.quantity})</span></div><div class="m-prev-desc" style="color:var(--text-display);font-weight:500;line-height:1.5;">${cTxtPreview}<span style="font-size:12px;color:var(--text-secondary);margin-right:4px;">${window.escapeHtml(o.vendor)}</span>${window.escapeHtml(cNm)}</div><span class="m-toggle-hint">상세 정보 보기 ▼</span></td>`;
     let safeDateKey = window.escapeHtml(dateKey||'').replace(/'/g,"\\'");
-    return `<tr style="border-bottom:1px solid var(--border-strong);" data-ord-id="${o.id}" data-ord-phone="${window.escapeHtml(o.phone)}">${mPreview}<td data-label="선택" class="tc"><input type="checkbox" class="chk-ord ${chkClass}" value="${o.id}"></td><td data-label="주문 시간" style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">${formatDt(o.created_at)}</td><td data-label="수령 센터" class="tc"><span style="background:var(--border);color:var(--text-display);padding:4px 8px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;">${centerShort}</span></td><td data-label="주문자"><span style="font-size:13px;color:var(--text-secondary);font-weight:600;">${o.batch||'-'}</span> <strong style="font-size:15px;font-weight:800;color:var(--text-display);cursor:pointer;transition:font-weight 0.12s;" onmouseover="this.style.fontWeight='900'" onmouseout="this.style.fontWeight='800'" onclick="window.toggleOrderDetail('${o.id}','${safeDateKey}')">${window.escapeHtml(o.name)}</strong></td><td data-label="생두사 / 상품명" style="max-width:300px;"><div style="display:flex;align-items:center;width:100%;min-width:0;gap:8px;"><div style="flex-shrink:0;">${vendorHtml}</div><span style="color:var(--border-strong);font-size:12px;flex-shrink:0;">|</span><div style="flex:1;min-width:0;">${copyableHtml}</div></span></td><td data-label="수량" class="tc" style="font-size:14px;font-weight:700;">${o.quantity}</td><td data-label="총 금액" style="text-align:right;"><input type="text" value="${o.total_price||''}" placeholder="0원" style="width:80px;padding:8px 8px;text-align:right;font-size:13px;font-weight:600;background:#fff;border:1px solid var(--border-strong);border-radius:8px;color:var(--text-display);outline:none;transition:0.2s;" onfocus="this.style.borderColor='var(--primary)';" onblur="this.style.borderColor='var(--border-strong)';window.handlePriceInput('${o.id}',this.value,'${o.status}',this)"></td><td data-label="결제" class="tc" style="border-left:1px solid var(--border-strong);">${paySelect}</td><td data-label="배송" class="tc" style="border-left:1px solid var(--border-strong);">${delSelect}</td></tr>`;
+    return `<tr style="border-bottom:1px solid var(--border-strong);" data-ord-id="${o.id}" data-ord-phone="${window.escapeHtml(o.phone)}">${mPreview}<td data-label="선택" class="tc"><input type="checkbox" class="chk-ord ${chkClass}" value="${o.id}"></td><td data-label="주문 시간" style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">${formatDt(o.created_at)}</td><td data-label="수령 센터" class="tc"><span style="background:var(--border);color:var(--text-display);padding:4px 8px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;">${centerShort}</span></td><td data-label="주문자" style="white-space:nowrap;"><span style="font-size:13px;color:var(--text-secondary);font-weight:600;">${o.batch||'-'}</span> <strong style="font-size:15px;font-weight:800;color:var(--text-display);cursor:pointer;transition:font-weight 0.12s;" onmouseover="this.style.fontWeight='900'" onmouseout="this.style.fontWeight='800'" onclick="window.toggleOrderDetail('${o.id}','${safeDateKey}')">${window.escapeHtml(o.name)}</strong></td><td data-label="생두사 / 상품명" style="max-width:300px;"><div style="display:flex;align-items:center;width:100%;min-width:0;gap:8px;"><div style="flex-shrink:0;">${vendorHtml}</div><span style="color:var(--border-strong);font-size:12px;flex-shrink:0;">|</span><div style="flex:1;min-width:0;">${copyableHtml}</div></span></td><td data-label="수량" class="tc" style="font-size:14px;font-weight:700;">${o.quantity}</td><td data-label="총 금액" style="text-align:right;"><input type="text" value="${o.total_price||''}" placeholder="0원" style="width:80px;padding:8px 8px;text-align:right;font-size:13px;font-weight:600;background:#fff;border:1px solid var(--border-strong);border-radius:8px;color:var(--text-display);outline:none;transition:0.2s;" onfocus="this.style.borderColor='var(--primary)';" onblur="this.style.borderColor='var(--border-strong)';window.handlePriceInput('${o.id}',this.value,'${o.status}',this)"></td><td data-label="결제" class="tc" style="border-left:1px solid var(--border-strong);">${paySelect}</td><td data-label="배송" class="tc" style="border-left:1px solid var(--border-strong);">${delSelect}</td></tr>`;
   }).join("");
 }
 window.handlePriceInput = async function(id, val, currentStatus, inputEl) {
@@ -2317,10 +2317,10 @@ function wcBlkRow(b,o){
   const chev=`<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="${o.open?'M6 15l6-6 6 6':'M6 9l6 6 6-6'}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
   const when=o.when||'';
   return `<div class="wc-bl-row${o.open?' open':''}">`+
-    `<div class="d"><span>${o.date}${o.today?'<em>오늘</em>':''}</span>${o.rule?`<small>${wcEsc(o.rule)}</small>`:''}</div>`+
+    `<div class="d"><span>${o.date}${o.today&&!o.toggle?'<em>오늘</em>':''}</span></div>`+
     `<span class="t">${o.time}</span>`+
     `<span class="k">${wcEsc(b.category)}</span>`+
-    `<span class="n">${nameA}</span>`+
+    `<span class="n">${nameA}${o.rule?`<small>${wcEsc(o.rule)}</small>`:''}</span>`+
     `<span class="p">${wcEsc(wcPlace(b))}</span>`+
     /* 모바일: 이름 → 시간 → 구분·장소 */
     `<div class="m"><span class="mn">${nameA}</span><span class="mw">${o.today&&!o.toggle?'<em>오늘</em> ':''}${wcEsc(when)}</span><span class="mm">${wcEsc(b.category)} · ${wcEsc(wcPlace(b))}</span>`+
@@ -3571,6 +3571,21 @@ window.renderCuppingBeans = function(sessionId) {
   const beans = gCuppingBeans[sessionId] || [];
   const area = $("beanListArea");
   if ($("beanCount")) $("beanCount").textContent = beans.length;
+  /* 전체 삭제는 '라인업 (n)' 제목 줄 오른쪽 */
+  var ttl = $("beanCount") ? $("beanCount").parentElement : null;
+  if (ttl) {
+    if (!ttl.querySelector(".wc-bean-ttl")) {
+      var tw = document.createElement("span"); tw.className = "wc-bean-ttl";
+      while (ttl.firstChild) tw.appendChild(ttl.firstChild);
+      ttl.appendChild(tw);
+      ttl.style.display = "flex"; ttl.style.alignItems = "center"; ttl.style.justifyContent = "space-between"; ttl.style.gap = "8px"; ttl.style.minHeight = "32px";
+    }
+    var del = ttl.querySelector(".wc-bean-delall");
+    if (!del) { del = document.createElement("button"); del.type = "button"; del.className = "btn-outline btn-sm wc-bean-delall"; del.style.cssText = "padding:6px 12px;white-space:nowrap;flex-shrink:0;color:var(--error,#f04452);border-color:var(--error,#f04452);"; ttl.appendChild(del); }
+    del.style.display = beans.length ? "" : "none";
+    del.textContent = "전체 삭제 (" + beans.length + ")";
+    del.onclick = function () { window.deleteAllCuppingBeans(sessionId); };
+  }
   if (!area) return;
   const toolbar = _wcClipToolbar(sessionId, beans.length);
   if (!beans.length) {
@@ -3703,7 +3718,6 @@ function _wcClipToolbar(sessionId, beanCount) {
     btn("라인업 전체 복사" + (beanCount ? " (" + beanCount + ")" : ""), beanCount > 0, "window.copyCuppingLineup(\'" + sessionId + "\')", false) +
     btn("같은 주 세션에 적용", beanCount > 0, "window.openWeekLineupApply(\'" + sessionId + "\')", false) +
     btn("붙여넣기" + (clipN ? " (" + clipN + ")" : ""), clipN > 0, "window.pasteCuppingLineup(\'" + sessionId + "\')", true) +
-    (beanCount > 0 ? '<button type="button" class="btn-outline btn-sm" style="padding:6px 12px;margin-left:auto;color:var(--error,#f04452);border-color:var(--error,#f04452);" onclick="window.deleteAllCuppingBeans(\'' + sessionId + '\')">전체 삭제 (' + beanCount + ')</button>' : '') +
     '</div>';
 }
 /* ── 지난 세션 라인업 불러오기 (과거 세션 목록에서 골라 원두+레퍼런스 복사) ── */
