@@ -1163,7 +1163,7 @@ window.openCrmModal=function(id,isReadOnly=false){isCrmReadOnly=isReadOnly;if($(
 /* ── 11-29: 신청 상세 '유입 기록' 카드 · 신청에 저장된 처음 방문 / 신청 직전 방문(attribution)
    광고 판단: 광고로 온 표시(paid) 또는 utm_medium=paid_social 또는 캠페인·광고 이름이 있으면 광고
    이름이 번호(메타 ID)로만 남은 예전 기록은 meta_adset_info / meta_ad_info에서 이름을 찾아 바꿔 보여 줌 ── */
-var WC_ATTR_PAGE={'/':'홈','/about-wecoffee':'위커피 소개 페이지','/apply':'신청 페이지','/join':'가입 안내','/about':'소개','/growth':'이렇게 성장합니다','/benefits':'멤버 혜택','/reviews':'멤버 후기','/interview':'멤버 후기 더보기','/ambassador':'앰버서더','/survey':'설문 페이지'};
+var WC_ATTR_PAGE={'/':'메인 페이지','/about-wecoffee':'모바일 랜딩페이지','/apply':'신청 페이지','/join':'가입 안내 페이지','/about':'소개 페이지','/growth':'성장 과정 페이지','/benefits':'멤버 혜택 페이지','/reviews':'멤버 후기 페이지','/interview':'멤버 후기 더보기 페이지','/ambassador':'앰버서더 페이지','/survey':'설문 페이지'};
 function wcAttrDec(x){x=String(x||'').replace(/\+/g,' ');try{x=decodeURIComponent(x);}catch(e){}return x.trim();}
 function wcAttrIsAd(t){return !!t&&(t.paid===true||t.medium==='paid_social'||!!t.campaign||!!t.content);}
 function wcAttrPlat(t){var s=String(t.source||'').toLowerCase(),r=String(t.ref||'').toLowerCase();
